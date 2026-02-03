@@ -1,26 +1,240 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #171615;
+  --muted: #6c6762;
+  --paper: #fbf7f2;
+  --paper-strong: #f4eee7;
+  --line: #e6dfd7;
+  --accent: #1b1a19;
+  --shadow: 0 24px 60px rgba(25, 18, 11, 0.08);
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: radial-gradient(1200px 500px at 50% -150px, #fffdf9 0%, var(--paper) 55%, #f7f0e8 100%);
+  color: var(--ink);
+  font-family: "SF Pro Text", "Helvetica Neue", "Nimbus Sans", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+main {
+  min-height: 100vh;
+}
+
+.app-shell {
+  padding: 36px 24px 80px;
+}
+
+.top-nav {
+  max-width: 1040px;
+  margin: 0 auto 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  font-family: "Iowan Old Style", "Palatino", "Palatino Linotype", serif;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.hero {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.hero-title {
+  font-family: "Iowan Old Style", "Palatino", "Palatino Linotype", serif;
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+
+.hero-subtitle {
+  color: var(--muted);
+  max-width: 620px;
+  margin: 0 auto 22px;
+  font-size: 15px;
+}
+
+.card {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.card.soft {
+  background: var(--paper-strong);
+  box-shadow: none;
+}
+
+.section {
+  margin-top: 26px;
+}
+
+.section-title {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.stack {
+  display: grid;
+  gap: 18px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  border: 0;
+  margin: 24px 0;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: white;
+  font-size: 15px;
+}
+
+.label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+.button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.list-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: white;
+}
+
+.link {
+  text-decoration: underline;
+}
+
+.code-block {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  background: var(--paper-strong);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.notice {
+  border: 1px solid var(--line);
+  background: var(--paper-strong);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 28px 18px 64px;
+  }
+
+  .top-nav {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

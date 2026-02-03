@@ -1,65 +1,101 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+import { useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "@/src/lib/firebase";
+import { useAuth } from "@/src/context/AuthContext";
+
+export default function HomePage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) router.push("/login");
+  }, [loading, user, router]);
+
+  if (loading) return <main className="page">Loading…</main>;
+
+  if (!user) {
+    return (
+      <main className="page">
+        <section className="hero">
+          <h1 className="hero-title">Effortless room bidding for group trips.</h1>
+          <p className="hero-subtitle">
+            Set the trip price, open the auction, and let your group bid on rooms. The split stays fair while the
+            decisions feel easy.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          <div className="row" style={{ justifyContent: "center" }}>
+            <Link className="button" href="/login">
+              Sign in to start
+            </Link>
+            <span className="pill">Invite codes supported</span>
+          </div>
+        </section>
+
+        <section className="grid-2">
+          <div className="card">
+            <div className="section-title">How it works</div>
+            <div className="stack">
+              <div>
+                <strong>Create a trip.</strong>
+                <div className="muted">Set total cost, rooms, and auction rules in minutes.</div>
+              </div>
+              <div>
+                <strong>Share the link.</strong>
+                <div className="muted">Participants join instantly with a clean invite code.</div>
+              </div>
+              <div>
+                <strong>Let the market decide.</strong>
+                <div className="muted">Bids set priorities while the group total stays fixed.</div>
+              </div>
+            </div>
+          </div>
+          <div className="card soft">
+            <div className="section-title">Built for clarity</div>
+            <div className="stack">
+              <div className="notice">Minimal controls, live leaderboard, and transparent final pricing.</div>
+              <div className="row">
+                <span className="pill">Anti-sniping</span>
+                <span className="pill">Live results</span>
+                <span className="pill">Manager controls</span>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="page">
+      <section className="hero">
+        <h1 className="hero-title">Welcome back.</h1>
+        <p className="hero-subtitle">Signed in as {user.email}. Ready to open a new auction?</p>
+        <div className="row" style={{ justifyContent: "center" }}>
+          <Link className="button" href="/create-trip">
+            Create a trip
+          </Link>
+          <button className="button secondary" onClick={() => signOut(auth)}>
+            Sign out
+          </button>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="section-title">Next steps</div>
+        <div className="stack">
+          <div>
+            <strong>Create a new trip</strong>
+            <div className="muted">Define rooms, auction rules, and send your invite.</div>
+          </div>
+          <div>
+            <strong>Visit an existing trip</strong>
+            <div className="muted">Use a shared invite link to join the live lobby.</div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
