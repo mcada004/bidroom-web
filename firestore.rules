@@ -78,6 +78,7 @@ service cloud.firestore {
           ]) &&
           request.resource.data.currentHighBidderUid is string &&
           request.resource.data.currentHighBidderUid == request.auth.uid &&
+          request.resource.data.currentHighBidAt == request.time &&
           request.resource.data.currentHighBidAmount is number &&
           (
             !(resource.data.currentHighBidAmount is number) ||
@@ -104,7 +105,8 @@ service cloud.firestore {
             request.resource.data.keys().hasOnly(["amount", "bidderUid", "bidTimeMs", "createdAt"]) &&
             request.resource.data.bidderUid == request.auth.uid &&
             request.resource.data.amount is number &&
-            request.resource.data.bidTimeMs is number;
+            request.resource.data.bidTimeMs is number &&
+            request.resource.data.createdAt == request.time;
 
           // Bids are append-only.
           allow update, delete: if false;
