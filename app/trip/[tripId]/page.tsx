@@ -73,6 +73,7 @@ export default function TripPage() {
   const inviteCode = useMemo(() => searchParams.get("code") ?? "", [searchParams]);
 
   const { user, loading } = useAuth();
+  const isGuestView = !user;
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -111,6 +112,12 @@ export default function TripPage() {
   }, [trip]);
 
   const remainingMs = useMemo(() => (endAtMs ? endAtMs - nowMs : null), [endAtMs, nowMs]);
+
+  function leadingBidderLabel(uid: string | null) {
+    if (!uid) return null;
+    if (isGuestView) return "Participant";
+    return memberNameByUid[uid] ?? "(signed-in user)";
+  }
 
   function maxAllowedForRoom(roomId: string) {
     if (!trip) return 0;
@@ -184,27 +191,31 @@ export default function TripPage() {
         (e) => setError(`Rooms subscription error: ${e.message}`)
       );
 
-      unsubMembers = onSnapshot(
-        collection(db, "trips", tripId, "members"),
-        (snap3) => {
-          const list = snap3.docs.map((d) => {
-            const m = d.data() as any;
-            return {
-              uid: d.id,
-              displayName: m.displayName ?? d.id,
-              role: (m.role ?? "participant") as any,
-            } as Member;
-          });
+      if (user) {
+        unsubMembers = onSnapshot(
+          collection(db, "trips", tripId, "members"),
+          (snap3) => {
+            const list = snap3.docs.map((d) => {
+              const m = d.data() as any;
+              return {
+                uid: d.id,
+                displayName: m.displayName ?? d.id,
+                role: (m.role ?? "participant") as any,
+              } as Member;
+            });
 
-          list.sort((a, b) => {
-            if (a.role !== b.role) return a.role === "manager" ? -1 : 1;
-            return a.displayName.localeCompare(b.displayName);
-          });
+            list.sort((a, b) => {
+              if (a.role !== b.role) return a.role === "manager" ? -1 : 1;
+              return a.displayName.localeCompare(b.displayName);
+            });
 
-          setMembers(list);
-        },
-        (e) => setError(`Members subscription error: ${e.message}`)
-      );
+            setMembers(list);
+          },
+          (e) => setError(`Members subscription error: ${e.message}`)
+        );
+      } else {
+        setMembers([]);
+      }
     }
 
     if (!loading) boot().catch((e: any) => setError(e?.message ?? "Failed to load"));
@@ -442,7 +453,6 @@ export default function TripPage() {
   }
 
   if (loading) return <main className="page">Auth loading…</main>;
-  if (!user) return <main className="page">Not signed in.</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
 
@@ -469,20 +479,32 @@ export default function TripPage() {
         <div className="code-block">{typeof window !== "undefined" ? window.location.href : ""}</div>
       </section>
 
+      {isGuestView && (
+        <section className="card soft section">
+          <div className="notice">Viewing as guest — sign in to bid</div>
+        </section>
+      )}
+
       <section className="card section">
         <div className="section-title">Lobby</div>
-        <div className="row">
-          <span className="pill">Participants: {members.length}</span>
-          {isManager ? <span className="pill">Manager view</span> : null}
-        </div>
-        <ul className="list" style={{ marginTop: 12 }}>
-          {members.map((m) => (
-            <li key={m.uid} className="list-item">
-              <strong>{m.displayName}</strong>
-              <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
-            </li>
-          ))}
-        </ul>
+        {isGuestView ? (
+          <p className="muted">Sign in to join and view the participant lobby.</p>
+        ) : (
+          <>
+            <div className="row">
+              <span className="pill">Participants: {members.length}</span>
+              {isManager ? <span className="pill">Manager view</span> : null}
+            </div>
+            <ul className="list" style={{ marginTop: 12 }}>
+              {members.map((m) => (
+                <li key={m.uid} className="list-item">
+                  <strong>{m.displayName}</strong>
+                  <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </section>
 
       <section className="card section">
@@ -537,8 +559,7 @@ export default function TripPage() {
               const current = r.currentHighBidAmount || 0;
               const nextBid = current === 0 ? r.startingPrice : current + trip.bidIncrement;
 
-              const highBidderName =
-                r.currentHighBidderUid ? memberNameByUid[r.currentHighBidderUid] ?? "(unknown member)" : null;
+              const highBidderName = leadingBidderLabel(r.currentHighBidderUid);
 
               const canBid = trip.status === "live" && (endAtMs ? nowMs < endAtMs : true) && nextBid <= maxAllowed;
 
@@ -551,23 +572,29 @@ export default function TripPage() {
 
                   <div className="muted" style={{ marginTop: 6 }}>
                     Starting ${r.startingPrice} • Current <strong>${current}</strong>
-                    {highBidderName ? <span> — winning: {highBidderName}</span> : null}
+                    {highBidderName ? <span> — leading: {highBidderName}</span> : null}
                   </div>
 
                   <div className="muted">Max allowed right now: <strong>${maxAllowed}</strong></div>
 
                   {trip.status !== "ended" ? (
-                    <button
-                      className="button"
-                      style={{ marginTop: 10 }}
-                      disabled={!canBid || busyRoomId === r.id}
-                      onClick={() => placeBid(r)}
-                    >
-                      {busyRoomId === r.id ? "Bidding…" : `Bid $${nextBid}`}
-                    </button>
+                    user ? (
+                      <button
+                        className="button"
+                        style={{ marginTop: 10 }}
+                        disabled={!canBid || busyRoomId === r.id}
+                        onClick={() => placeBid(r)}
+                      >
+                        {busyRoomId === r.id ? "Bidding…" : `Bid $${nextBid}`}
+                      </button>
+                    ) : (
+                      <a className="button ghost" style={{ marginTop: 10, display: "inline-block" }} href="/login">
+                        Sign in to bid
+                      </a>
+                    )
                   ) : (
                     <div style={{ marginTop: 10 }}>
-                      Winner: <strong>{r.winnerUid ? memberNameByUid[r.winnerUid] ?? "Someone" : "No winner"}</strong>
+                      Winner: <strong>{leadingBidderLabel(r.winnerUid) ?? "No winner"}</strong>
                       {typeof r.winnerAmount === "number" ? ` — $${r.winnerAmount}` : ""}
                     </div>
                   )}

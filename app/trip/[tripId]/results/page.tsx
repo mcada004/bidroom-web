@@ -39,6 +39,7 @@ export default function ResultsPage() {
   const code = searchParams.get("code") ?? "";
 
   const { user, loading } = useAuth();
+  const isGuestView = !user;
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -89,14 +90,18 @@ export default function ResultsPage() {
         );
       });
 
-      unsubMembers = onSnapshot(collection(db, "trips", tripId, "members"), (snap3) => {
-        setMembers(
-          snap3.docs.map((d) => {
-            const m = d.data() as any;
-            return { uid: d.id, displayName: m.displayName ?? d.id } as Member;
-          })
-        );
-      });
+      if (user) {
+        unsubMembers = onSnapshot(collection(db, "trips", tripId, "members"), (snap3) => {
+          setMembers(
+            snap3.docs.map((d) => {
+              const m = d.data() as any;
+              return { uid: d.id, displayName: m.displayName ?? d.id } as Member;
+            })
+          );
+        });
+      } else {
+        setMembers([]);
+      }
     }
 
     if (!loading) boot().catch((e: any) => setError(e?.message ?? "Failed to load"));
@@ -106,13 +111,19 @@ export default function ResultsPage() {
       if (unsubRooms) unsubRooms();
       if (unsubMembers) unsubMembers();
     };
-  }, [tripId, code, loading]);
+  }, [tripId, code, loading, user]);
 
   const memberName = useMemo(() => {
     const map: Record<string, string> = {};
     for (const m of members) map[m.uid] = m.displayName;
     return map;
   }, [members]);
+
+  function participantLabel(uid: string | null) {
+    if (!uid) return null;
+    if (isGuestView) return "Participant";
+    return memberName[uid] ?? "(signed-in user)";
+  }
 
   // Live leaders per room (during live auction)
   const liveLeaders = useMemo(() => {
@@ -195,7 +206,6 @@ export default function ResultsPage() {
   }, [user, trip, rooms]);
 
   if (loading) return <main className="page">Loading…</main>;
-  if (!user) return <main className="page">Please sign in.</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
 
@@ -216,10 +226,14 @@ export default function ResultsPage() {
       </section>
 
       <section className="card">
+        {isGuestView && <div className="notice">Viewing as guest — sign in to bid</div>}
         <div className="section-title">My status</div>
+        {isGuestView ? (
+          <p className="muted">Sign in to join bidding and see your personal winning status.</p>
+        ) : null}
         {trip.status === "draft" && <p className="muted">The auction hasn’t started yet.</p>}
 
-        {trip.status === "live" && (
+        {!isGuestView && trip.status === "live" && (
           <>
             {myProvisional ? (
               <p>
@@ -235,7 +249,7 @@ export default function ResultsPage() {
           </>
         )}
 
-        {trip.status === "ended" && (
+        {!isGuestView && trip.status === "ended" && (
           <>
             {myProvisional ? (
               <p>
@@ -264,7 +278,7 @@ export default function ResultsPage() {
                   <div className="muted">
                     {r.amount > 0 ? (
                       <>
-                        {r.uid ? memberName[r.uid] ?? r.uid : "—"} — <strong>${r.amount}</strong>
+                        {participantLabel(r.uid)} — <strong>${r.amount}</strong>
                       </>
                     ) : (
                       <>No bids yet</>
@@ -297,7 +311,7 @@ export default function ResultsPage() {
                   <div className="muted">
                     {r.uid ? (
                       <>
-                        {memberName[r.uid] ?? r.uid} — <strong>${r.amount}</strong>
+                        {participantLabel(r.uid)} — <strong>${r.amount}</strong>
                       </>
                     ) : (
                       <>No winner</>
