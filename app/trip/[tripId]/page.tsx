@@ -80,6 +80,16 @@ type FirestoreLikeError = {
   details?: unknown;
 };
 
+declare global {
+  interface Window {
+    __bidroomAuth?: {
+      getUser: () => typeof auth.currentUser;
+      getUid: () => string | undefined;
+      getToken: () => Promise<string | undefined>;
+    };
+  }
+}
+
 const DEBUG_BIDS = process.env.NEXT_PUBLIC_DEBUG_BIDS === "true";
 
 function extractFirestoreError(err: unknown) {
@@ -115,12 +125,27 @@ export default function TripPage() {
   const [busyGuestAuth, setBusyGuestAuth] = useState(false);
   const [guestActionError, setGuestActionError] = useState<string | null>(null);
   const [bidAuthError, setBidAuthError] = useState<string | null>(null);
+  const [bidActionError, setBidActionError] = useState<string | null>(null);
 
   const [nowMs, setNowMs] = useState(Date.now());
 
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.__bidroomAuth = {
+      getUser: () => auth.currentUser,
+      getUid: () => auth.currentUser?.uid,
+      getToken: async () => auth.currentUser?.getIdToken(),
+    };
+
+    return () => {
+      delete window.__bidroomAuth;
+    };
   }, []);
 
   const isManager = useMemo(() => !!(user && trip && user.uid === trip.createdByUid), [user, trip]);
@@ -448,9 +473,11 @@ export default function TripPage() {
         currentUserAnonymous: user?.isAnonymous ?? null,
       });
       const signedInUser = auth.currentUser ?? user ?? (await signInAnonymously(auth)).user;
-      await signedInUser.getIdToken();
+      await signedInUser.getIdToken(true);
       const nextUser = auth.currentUser;
       if (!nextUser?.uid) throw new Error("Sign in / Continue as guest to bid");
+      setBidAuthError(null);
+      setBidActionError(null);
 
       const memberRef = doc(db, "trips", tripId, "members", nextUser.uid);
 
@@ -463,7 +490,6 @@ export default function TripPage() {
         },
         { merge: true }
       );
-      setBidAuthError(null);
       debugBidLog("continue_as_guest_success", {
         uid: nextUser.uid,
         isAnonymous: nextUser.isAnonymous,
@@ -498,6 +524,11 @@ export default function TripPage() {
     if (!trip) return;
 
     const authUser = auth.currentUser;
+    debugBidLog("bid_auth_check", {
+      uid: authUser?.uid ?? null,
+      isAnonymous: authUser?.isAnonymous ?? null,
+      hasCurrentUser: !!authUser,
+    });
     const uid = authUser?.uid;
     const optimisticAmount =
       (room.currentHighBidAmount || 0) === 0 ? Math.max(room.startingPrice || 0, 1) : (room.currentHighBidAmount || 0) + trip.bidIncrement;
@@ -511,9 +542,11 @@ export default function TripPage() {
 
     if (!uid) {
       setBidAuthError("Sign in / Continue as guest to bid");
+      setBidActionError("Sign in / Continue as guest to bid");
       return;
     }
     setBidAuthError(null);
+    setBidActionError(null);
 
     if (trip.status !== "live") return alert("Auction is not live yet.");
     if (endAtMs && nowMs >= endAtMs) return alert("Auction has ended.");
@@ -521,6 +554,7 @@ export default function TripPage() {
     setBusyRoomId(room.id);
     const tripRefPath = `trips/${tripId}`;
     const roomRefPath = `trips/${tripId}/rooms/${room.id}`;
+    debugBidLog("bid_write_paths", { tripPath: tripRefPath, roomPath: roomRefPath });
     let bidRefPath: string | null = null;
     let txStage = "start";
     let attemptedAntiSnipeUpdate = false;
@@ -640,7 +674,9 @@ export default function TripPage() {
         message: parsed.message,
         details: parsed.details,
       });
-      alert(parsed.message || "Bid failed");
+      const bidFailureMessage = `Bid failed [${parsed.code}] at ${txStage}: ${parsed.message}`;
+      setBidActionError(bidFailureMessage);
+      alert(bidFailureMessage);
     } finally {
       setBusyRoomId(null);
     }
@@ -686,6 +722,7 @@ export default function TripPage() {
           <div className="notice">Viewing as guest — continue as guest to bid</div>
           {guestActionError ? <p className="muted" style={{ marginTop: 10 }}>{guestActionError}</p> : null}
           {bidAuthError ? <p className="muted" style={{ marginTop: 10 }}>{bidAuthError}</p> : null}
+          {bidActionError ? <p className="muted" style={{ marginTop: 10 }}>{bidActionError}</p> : null}
         </section>
       )}
 
@@ -755,6 +792,7 @@ export default function TripPage() {
       <section className="card section">
         <div className="section-title">Rooms</div>
         {bidAuthError ? <p className="muted" style={{ marginBottom: 10 }}>{bidAuthError}</p> : null}
+        {bidActionError ? <p className="muted" style={{ marginBottom: 10 }}>{bidActionError}</p> : null}
         {rooms.length === 0 ? (
           <p className="muted">No rooms found.</p>
         ) : (
