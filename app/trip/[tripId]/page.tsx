@@ -114,6 +114,7 @@ export default function TripPage() {
   const [busyAdmin, setBusyAdmin] = useState(false);
   const [busyGuestAuth, setBusyGuestAuth] = useState(false);
   const [guestActionError, setGuestActionError] = useState<string | null>(null);
+  const [bidAuthError, setBidAuthError] = useState<string | null>(null);
 
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -446,7 +447,11 @@ export default function TripPage() {
         currentUserUid: user?.uid ?? null,
         currentUserAnonymous: user?.isAnonymous ?? null,
       });
-      const nextUser = user ?? (await signInAnonymously(auth)).user;
+      const signedInUser = auth.currentUser ?? user ?? (await signInAnonymously(auth)).user;
+      await signedInUser.getIdToken();
+      const nextUser = auth.currentUser;
+      if (!nextUser?.uid) throw new Error("Sign in / Continue as guest to bid");
+
       const memberRef = doc(db, "trips", tripId, "members", nextUser.uid);
 
       await setDoc(
@@ -458,6 +463,7 @@ export default function TripPage() {
         },
         { merge: true }
       );
+      setBidAuthError(null);
       debugBidLog("continue_as_guest_success", {
         uid: nextUser.uid,
         isAnonymous: nextUser.isAnonymous,
@@ -489,7 +495,26 @@ export default function TripPage() {
 
   // ---------- Bidding ----------
   async function placeBid(room: Room) {
-    if (!user || !trip) return;
+    if (!trip) return;
+
+    const authUser = auth.currentUser;
+    const uid = authUser?.uid;
+    const optimisticAmount =
+      (room.currentHighBidAmount || 0) === 0 ? Math.max(room.startingPrice || 0, 1) : (room.currentHighBidAmount || 0) + trip.bidIncrement;
+    debugBidLog("bid_preflight", {
+      uid: uid ?? null,
+      isAnonymous: authUser?.isAnonymous ?? null,
+      tripId,
+      roomId: room.id,
+      amount: optimisticAmount,
+    });
+
+    if (!uid) {
+      setBidAuthError("Sign in / Continue as guest to bid");
+      return;
+    }
+    setBidAuthError(null);
+
     if (trip.status !== "live") return alert("Auction is not live yet.");
     if (endAtMs && nowMs >= endAtMs) return alert("Auction has ended.");
 
@@ -502,11 +527,11 @@ export default function TripPage() {
 
     try {
       if (DEBUG_BIDS) {
-        const memberRef = doc(db, "trips", tripId, "members", user.uid);
+        const memberRef = doc(db, "trips", tripId, "members", uid);
         const memberSnap = await getDoc(memberRef);
         debugBidLog("bid_user_context", {
-          uid: user.uid,
-          isAnonymous: user.isAnonymous,
+          uid,
+          isAnonymous: authUser?.isAnonymous ?? null,
           memberExists: memberSnap.exists(),
           memberPath: memberRef.path,
           tripPath: tripRefPath,
@@ -528,7 +553,6 @@ export default function TripPage() {
 
         const totalPrice = Number(t.totalPrice ?? 0);
         const bidIncrement = Number(t.bidIncrement ?? 20);
-        const antiWin = Number(t.antiSnipeWindowMinutes ?? 10);
         const antiExt = Number(t.antiSnipeExtendMinutes ?? 10);
 
         const current = Number(r.currentHighBidAmount ?? 0);
@@ -557,27 +581,40 @@ export default function TripPage() {
           roomPath: roomRef.path,
           bidPath: bidRefPath,
         });
-        txStage = "write_bid_doc";
-        tx.set(bidRef, { amount: nextBid, bidderUid: user.uid, bidTimeMs, createdAt: serverTimestamp() });
 
-        txStage = "write_room_high_bid";
-        tx.update(roomRef, {
+        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
+        debugBidLog("bid_create_payload", bidCreatePayload);
+        txStage = "write_bid_doc";
+        tx.set(bidRef, bidCreatePayload);
+
+        const roomUpdatePayload = {
           currentHighBidAmount: nextBid,
-          currentHighBidderUid: user.uid,
+          currentHighBidderUid: uid,
           currentHighBidAt: serverTimestamp(),
           currentHighBidTimeMs: bidTimeMs,
-        });
+        };
+        debugBidLog("room_update_payload", roomUpdatePayload);
+        txStage = "write_room_high_bid";
+        tx.update(roomRef, roomUpdatePayload);
 
         // anti-sniping extend
         const endAt = t.auctionEndAt;
-        if (endAt?.toMillis) {
+        if (t.status === "live" && endAt?.toMillis) {
           const endMs = endAt.toMillis();
           const msLeft = endMs - bidTimeMs;
-          const extendMs = antiExt * 60 * 1000;
+          const maxRuleWindowMs = 10 * 60 * 1000;
+          const configuredExtendMs = Math.floor(antiExt) * 60 * 1000;
+          const extendMs = Math.min(maxRuleWindowMs, configuredExtendMs);
           const nextEndMs = endMs + extendMs;
 
-          // Guard trip write so bids still work even if extension config is zero/invalid.
-          if (msLeft <= antiWin * 60 * 1000 && extendMs > 0 && nextEndMs > endMs) {
+          // Guard trip write so bids still work even when anti-snipe config is out-of-bounds.
+          if (
+            msLeft >= 0 &&
+            msLeft <= maxRuleWindowMs &&
+            extendMs > 0 &&
+            nextEndMs > endMs &&
+            nextEndMs <= endMs + maxRuleWindowMs
+          ) {
             attemptedAntiSnipeUpdate = true;
             txStage = "write_trip_anti_snipe";
             tx.update(tripRef, { auctionEndAt: new Date(nextEndMs) });
@@ -619,6 +656,7 @@ export default function TripPage() {
         ? formatTime(remainingMs)
         : "00:00:00"
       : null;
+  const authReadyUser = auth.currentUser;
 
   return (
     <main className="page">
@@ -647,6 +685,7 @@ export default function TripPage() {
         <section className="card soft section">
           <div className="notice">Viewing as guest — continue as guest to bid</div>
           {guestActionError ? <p className="muted" style={{ marginTop: 10 }}>{guestActionError}</p> : null}
+          {bidAuthError ? <p className="muted" style={{ marginTop: 10 }}>{bidAuthError}</p> : null}
         </section>
       )}
 
@@ -715,6 +754,7 @@ export default function TripPage() {
 
       <section className="card section">
         <div className="section-title">Rooms</div>
+        {bidAuthError ? <p className="muted" style={{ marginBottom: 10 }}>{bidAuthError}</p> : null}
         {rooms.length === 0 ? (
           <p className="muted">No rooms found.</p>
         ) : (
@@ -726,7 +766,7 @@ export default function TripPage() {
 
               const highBidderName = leadingBidderLabel(r.currentHighBidderUid);
 
-              const canBid = trip.status === "live" && (endAtMs ? nowMs < endAtMs : true) && nextBid <= maxAllowed;
+              const canBid = !!authReadyUser && trip.status === "live" && (endAtMs ? nowMs < endAtMs : true) && nextBid <= maxAllowed;
 
               return (
                 <li key={r.id} className="list-item">
@@ -743,7 +783,7 @@ export default function TripPage() {
                   <div className="muted">Max allowed right now: <strong>${maxAllowed}</strong></div>
 
                   {trip.status !== "ended" ? (
-                    user ? (
+                    authReadyUser ? (
                       <button
                         className="button"
                         style={{ marginTop: 10 }}
@@ -757,9 +797,9 @@ export default function TripPage() {
                         className="button ghost"
                         style={{ marginTop: 10 }}
                         onClick={continueAsGuest}
-                        disabled={busyGuestAuth}
+                        disabled={busyGuestAuth || !!user}
                       >
-                        {busyGuestAuth ? "Continuing..." : "Continue as guest to bid"}
+                        {busyGuestAuth ? "Continuing..." : "Sign in / Continue as guest to bid"}
                       </button>
                     )
                   ) : (
