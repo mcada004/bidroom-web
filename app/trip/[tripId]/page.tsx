@@ -492,9 +492,9 @@ export default function TripPage() {
         currentUserUid: user?.uid ?? null,
         currentUserAnonymous: user?.isAnonymous ?? null,
       });
-      const signedInUser = auth.currentUser ?? user ?? (await signInAnonymously(auth)).user;
+      const signedInUser = auth.currentUser ?? (await signInAnonymously(auth)).user;
       await signedInUser.getIdToken(true);
-      const nextUser = auth.currentUser;
+      const nextUser = auth.currentUser ?? signedInUser;
       if (!nextUser?.uid) throw new Error("Sign in / Continue as guest to bid");
       setBidAuthError(null);
       setBidActionError(null);
@@ -506,7 +506,7 @@ export default function TripPage() {
         {
           displayName,
           role: nextUser.uid === trip.createdByUid ? "manager" : "participant",
-          joinedAt: serverTimestamp(),
+          joinedAt: Timestamp.now(),
         },
         { merge: true }
       );
@@ -621,6 +621,7 @@ export default function TripPage() {
     let bidRefPath: string | null = null;
     let txStage = "start";
     let attemptedAntiSnipeUpdate = false;
+    let pendingAntiSnipeEndAt: Date | null = null;
     let failureTripStatus: string = trip.status;
     let failureCurrentBid = room.currentHighBidAmount ?? 0;
     let failureNextBid = optimisticAmount;
@@ -831,12 +832,25 @@ export default function TripPage() {
             nextEndMs <= endMs + maxRuleWindowMs
           ) {
             attemptedAntiSnipeUpdate = true;
-            txStage = "write_trip_anti_snipe";
-            tx.update(tripRef, { auctionEndAt: new Date(nextEndMs) });
+            pendingAntiSnipeEndAt = new Date(nextEndMs);
+            txStage = "queue_trip_anti_snipe";
           }
         }
         txStage = "commit";
       });
+      if (pendingAntiSnipeEndAt) {
+        try {
+          await updateDoc(doc(db, "trips", tripId), { auctionEndAt: pendingAntiSnipeEndAt });
+          debugBidLog("bid_anti_snipe_success", { tripPath: tripRefPath, auctionEndAt: pendingAntiSnipeEndAt });
+        } catch (antiSnipeErr: unknown) {
+          const antiSnipeParsed = extractFirestoreError(antiSnipeErr);
+          debugBidLog("bid_anti_snipe_failed", {
+            tripPath: tripRefPath,
+            code: antiSnipeParsed.code,
+            message: antiSnipeParsed.message,
+          });
+        }
+      }
       debugBidLog("bid_transaction_success", {
         tripPath: tripRefPath,
         roomPath: roomRefPath,
@@ -1018,7 +1032,7 @@ export default function TripPage() {
                         className="button ghost"
                         style={{ marginTop: 10 }}
                         onClick={continueAsGuest}
-                        disabled={busyGuestAuth || !!user}
+                        disabled={busyGuestAuth}
                       >
                         {busyGuestAuth ? "Continuing..." : "Sign in / Continue as guest to bid"}
                       </button>
