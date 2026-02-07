@@ -532,12 +532,32 @@ export default function TripPage() {
     const uid = authUser?.uid;
     const optimisticAmount =
       (room.currentHighBidAmount || 0) === 0 ? Math.max(room.startingPrice || 0, 1) : (room.currentHighBidAmount || 0) + trip.bidIncrement;
+    const localEndRaw = trip.auctionEndAt ?? null;
+    const localEndMs =
+      localEndRaw && typeof localEndRaw.toMillis === "function"
+        ? localEndRaw.toMillis()
+        : localEndRaw
+          ? new Date(localEndRaw).getTime()
+          : null;
+    const localAuctionLiveNow = trip.status === "live" && (localEndMs === null || nowMs <= localEndMs);
     debugBidLog("bid_preflight", {
       uid: uid ?? null,
       isAnonymous: authUser?.isAnonymous ?? null,
       tripId,
       roomId: room.id,
       amount: optimisticAmount,
+    });
+    debugBidLog("bid_rule_snapshot_pre_tx", {
+      authUid: uid ?? null,
+      authAnonymous: authUser?.isAnonymous ?? null,
+      tripStatus: trip.status,
+      tripAuctionEndAtRaw: localEndRaw,
+      tripAuctionEndAtMs: localEndMs,
+      auctionLiveNow: localAuctionLiveNow,
+      roomCurrentHighBidAmount: room.currentHighBidAmount ?? 0,
+      roomStartingPrice: room.startingPrice ?? 0,
+      computedNextBid: optimisticAmount,
+      nextBidGtCurrent: optimisticAmount > (room.currentHighBidAmount ?? 0),
     });
 
     if (!uid) {
@@ -558,6 +578,10 @@ export default function TripPage() {
     let bidRefPath: string | null = null;
     let txStage = "start";
     let attemptedAntiSnipeUpdate = false;
+    let failureTripStatus = trip.status;
+    let failureCurrentBid = room.currentHighBidAmount ?? 0;
+    let failureNextBid = optimisticAmount;
+    let failureAuctionEnded = !!(endAtMs && nowMs >= endAtMs);
 
     try {
       if (DEBUG_BIDS) {
@@ -584,14 +608,36 @@ export default function TripPage() {
 
         const t = tripSnap.data() as any;
         const r = roomSnap.data() as any;
+        const txNowMs = Date.now();
 
         const totalPrice = Number(t.totalPrice ?? 0);
         const bidIncrement = Number(t.bidIncrement ?? 20);
         const antiExt = Number(t.antiSnipeExtendMinutes ?? 10);
+        const txEndRaw = t.auctionEndAt ?? null;
+        const txEndMs = txEndRaw && typeof txEndRaw.toMillis === "function" ? txEndRaw.toMillis() : null;
+        const txAuctionLiveNow = t.status === "live" && (txEndMs === null || txNowMs <= txEndMs);
 
         const current = Number(r.currentHighBidAmount ?? 0);
         const starting = Number(r.startingPrice ?? 0);
         const nextBid = current === 0 ? Math.max(starting, 1) : current + bidIncrement;
+
+        failureTripStatus = String(t.status ?? "unknown");
+        failureCurrentBid = current;
+        failureNextBid = nextBid;
+        failureAuctionEnded = txEndMs !== null ? txNowMs > txEndMs : false;
+
+        debugBidLog("bid_rule_snapshot_tx", {
+          authUid: uid,
+          authAnonymous: authUser?.isAnonymous ?? null,
+          tripStatus: t.status ?? null,
+          tripAuctionEndAtRaw: txEndRaw,
+          tripAuctionEndAtMs: txEndMs,
+          auctionLiveNow: txAuctionLiveNow,
+          roomCurrentHighBidAmount: current,
+          roomStartingPrice: starting,
+          computedNextBid: nextBid,
+          nextBidGtCurrent: nextBid > current,
+        });
 
         const sumOther = rooms.reduce((sum, rr) => (rr.id === room.id ? sum : sum + (rr.currentHighBidAmount || 0)), 0);
         const maxAllowed = Math.max(0, totalPrice - sumOther);
@@ -614,6 +660,11 @@ export default function TripPage() {
           tripPath: tripRef.path,
           roomPath: roomRef.path,
           bidPath: bidRefPath,
+        });
+        debugBidLog("bid_payload_core", {
+          amount: nextBid,
+          bidderUid: uid,
+          bidTimeMs,
         });
 
         const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
@@ -674,7 +725,9 @@ export default function TripPage() {
         message: parsed.message,
         details: parsed.details,
       });
-      const bidFailureMessage = `Bid failed [${parsed.code}] at ${txStage}: ${parsed.message}`;
+      const bidFailureContext = `stage=${txStage} uid=${uid} tripStatus=${failureTripStatus} nextBid=${failureNextBid} currentBid=${failureCurrentBid} auctionEnded=${failureAuctionEnded}`;
+      debugBidLog("bid_failure_context", { bidFailureContext });
+      const bidFailureMessage = `Bid failed [${parsed.code}] at ${txStage}: ${parsed.message}. ${bidFailureContext}`;
       setBidActionError(bidFailureMessage);
       alert(bidFailureMessage);
     } finally {
