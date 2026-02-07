@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { signInAnonymously } from "firebase/auth";
 import {
   collection,
   doc,
@@ -14,8 +15,14 @@ import {
   writeBatch,
   getDocs,
 } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
+import {
+  getPreferredDisplayName,
+  getStoredGuestDisplayName,
+  normalizeDisplayName,
+  setStoredGuestDisplayName,
+} from "@/src/lib/authGuests";
 
 type Room = {
   id: string;
@@ -41,6 +48,7 @@ type Trip = {
   name: string;
   status: "draft" | "live" | "ended";
   inviteCode: string;
+  listingUrl?: string | null;
 
   createdByUid: string;
 
@@ -82,6 +90,8 @@ export default function TripPage() {
 
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
   const [busyAdmin, setBusyAdmin] = useState(false);
+  const [busyGuestAuth, setBusyGuestAuth] = useState(false);
+  const [guestActionError, setGuestActionError] = useState<string | null>(null);
 
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -125,6 +135,22 @@ export default function TripPage() {
     return Math.max(0, trip.totalPrice - sumOther);
   }
 
+  function promptForGuestName() {
+    if (typeof window === "undefined") return null;
+
+    let initial = getStoredGuestDisplayName() ?? "";
+    while (true) {
+      const input = window.prompt("Enter a display name (2-24 characters).", initial);
+      if (input === null) return null;
+
+      const normalized = normalizeDisplayName(input);
+      if (normalized) return normalized;
+
+      window.alert("Display name must be between 2 and 24 characters.");
+      initial = input;
+    }
+  }
+
   // ✅ LIVE subscriptions
   useEffect(() => {
     let unsubTrip: (() => void) | null = null;
@@ -149,10 +175,11 @@ export default function TripPage() {
 
       // join
       if (user) {
+        const displayName = getPreferredDisplayName(user);
         await setDoc(
           doc(db, "trips", tripId, "members", user.uid),
           {
-            displayName: user.email ?? "Participant",
+            displayName,
             role: user.uid === data.createdByUid ? "manager" : "participant",
             joinedAt: serverTimestamp(),
           },
@@ -381,6 +408,45 @@ export default function TripPage() {
     }
   }
 
+  async function continueAsGuest() {
+    if (!trip || loading) return;
+
+    const displayName = promptForGuestName();
+    if (!displayName) return;
+
+    setGuestActionError(null);
+    setBusyGuestAuth(true);
+
+    try {
+      setStoredGuestDisplayName(displayName);
+      const nextUser = user ?? (await signInAnonymously(auth)).user;
+
+      await setDoc(
+        doc(db, "trips", tripId, "members", nextUser.uid),
+        {
+          displayName,
+          role: nextUser.uid === trip.createdByUid ? "manager" : "participant",
+          joinedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (e: unknown) {
+      const code = typeof e === "object" && e && "code" in e ? String((e as { code?: string }).code) : "";
+      const message =
+        typeof e === "object" && e && "message" in e ? String((e as { message?: string }).message) : "Failed to continue as guest.";
+
+      if (code === "auth/operation-not-allowed") {
+        setGuestActionError("Anonymous sign-in is not enabled in Firebase Auth.");
+      } else if (code === "auth/network-request-failed") {
+        setGuestActionError("Network request failed. Check your connection and try again.");
+      } else {
+        setGuestActionError(message);
+      }
+    } finally {
+      setBusyGuestAuth(false);
+    }
+  }
+
   // ---------- Bidding ----------
   async function placeBid(room: Room) {
     if (!user || !trip) return;
@@ -477,18 +543,26 @@ export default function TripPage() {
       <section className="card">
         <div className="section-title">Share link</div>
         <div className="code-block">{typeof window !== "undefined" ? window.location.href : ""}</div>
+        {trip.listingUrl ? (
+          <div style={{ marginTop: 12 }}>
+            <a href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
+              View listing
+            </a>
+          </div>
+        ) : null}
       </section>
 
       {isGuestView && (
         <section className="card soft section">
-          <div className="notice">Viewing as guest — sign in to bid</div>
+          <div className="notice">Viewing as guest — continue as guest to bid</div>
+          {guestActionError ? <p className="muted" style={{ marginTop: 10 }}>{guestActionError}</p> : null}
         </section>
       )}
 
       <section className="card section">
         <div className="section-title">Lobby</div>
         {isGuestView ? (
-          <p className="muted">Sign in to join and view the participant lobby.</p>
+          <p className="muted">Continue as guest to join and appear in the participant lobby.</p>
         ) : (
           <>
             <div className="row">
@@ -588,13 +662,18 @@ export default function TripPage() {
                         {busyRoomId === r.id ? "Bidding…" : `Bid $${nextBid}`}
                       </button>
                     ) : (
-                      <a className="button ghost" style={{ marginTop: 10, display: "inline-block" }} href="/login">
-                        Sign in to bid
-                      </a>
+                      <button
+                        className="button ghost"
+                        style={{ marginTop: 10 }}
+                        onClick={continueAsGuest}
+                        disabled={busyGuestAuth}
+                      >
+                        {busyGuestAuth ? "Continuing..." : "Continue as guest to bid"}
+                      </button>
                     )
                   ) : (
                     <div style={{ marginTop: 10 }}>
-                     Winner: <strong>{leadingBidderLabel(r.winnerUid ?? null) ?? "No winner"}</strong>
+                      Winner: <strong>{leadingBidderLabel(r.winnerUid ?? null) ?? "No winner"}</strong>
                       {typeof r.winnerAmount === "number" ? ` — $${r.winnerAmount}` : ""}
                     </div>
                   )}

@@ -17,6 +17,7 @@ type Trip = {
   status: "draft" | "live" | "ended";
   inviteCode: string;
   createdByUid: string;
+  listingUrl?: string | null;
 
   totalPrice: number;
   auctionDurationHours: number;
@@ -46,6 +47,7 @@ export default function TripSettingsPage() {
 
   // form state
   const [name, setName] = useState("");
+  const [listingUrl, setListingUrl] = useState("");
   const [totalPrice, setTotalPrice] = useState<number>(0);
   const [durationHours, setDurationHours] = useState<number>(24);
   const [bidIncrement, setBidIncrement] = useState<number>(20);
@@ -53,6 +55,24 @@ export default function TripSettingsPage() {
   const [antiExt, setAntiExt] = useState<number>(10);
 
   const [saving, setSaving] = useState(false);
+
+  function parseListingUrlOrNull(raw: string) {
+    const value = raw.trim();
+    if (!value) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new Error("Listing link must be a valid URL starting with http:// or https://");
+    }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("Listing link must start with http:// or https://");
+    }
+
+    return value;
+  }
 
   const isManager = useMemo(() => {
     return !!(user && trip && user.uid === trip.createdByUid);
@@ -84,6 +104,7 @@ export default function TripSettingsPage() {
 
         // hydrate form when trip loads/changes
         setName(t.name ?? "");
+        setListingUrl(typeof t.listingUrl === "string" ? t.listingUrl : "");
         setTotalPrice(Number(t.totalPrice ?? 0));
         setDurationHours(Number(t.auctionDurationHours ?? 24));
         setBidIncrement(Number(t.bidIncrement ?? 20));
@@ -121,8 +142,11 @@ export default function TripSettingsPage() {
 
     setSaving(true);
     try {
+      const listingUrlValue = parseListingUrlOrNull(listingUrl);
+
       await updateDoc(doc(db, "trips", tripId), {
         name: name.trim() || "Trip",
+        listingUrl: listingUrlValue,
         totalPrice: Number(totalPrice),
         auctionDurationHours: Number(durationHours),
         bidIncrement: Number(bidIncrement),
@@ -180,6 +204,19 @@ export default function TripSettingsPage() {
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={!isManager || trip.status !== "draft"}
+            />
+          </label>
+
+          <label className="label">
+            Listing link (Airbnb/VRBO/etc)
+            <input
+              className="input"
+              type="url"
+              inputMode="url"
+              placeholder="https://..."
+              value={listingUrl}
+              onChange={(e) => setListingUrl(e.target.value)}
               disabled={!isManager || trip.status !== "draft"}
             />
           </label>

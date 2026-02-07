@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
+import { getPreferredDisplayName } from "@/src/lib/authGuests";
 
 function makeInviteCode(length = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -26,12 +27,31 @@ export default function CreateTripPage() {
   const { user, loading } = useAuth();
 
   const [tripName, setTripName] = useState("New Trip");
+  const [listingUrl, setListingUrl] = useState("");
   const [totalPrice, setTotalPrice] = useState<number>(2000);
   const [roomCount, setRoomCount] = useState<number>(4);
   const [durationHours, setDurationHours] = useState<number>(24);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function parseListingUrlOrNull(raw: string) {
+    const value = raw.trim();
+    if (!value) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new Error("Listing link must be a valid URL starting with http:// or https://");
+    }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("Listing link must start with http:// or https://");
+    }
+
+    return value;
+  }
 
   async function createTrip() {
     if (!user) return;
@@ -42,6 +62,7 @@ export default function CreateTripPage() {
     try {
       const P = Number(totalPrice);
       const N = Number(roomCount);
+      const listingUrlValue = parseListingUrlOrNull(listingUrl);
 
       if (!P || P <= 0) throw new Error("Total trip price must be > 0");
       if (!N || N < 1) throw new Error("Room count must be at least 1");
@@ -55,6 +76,7 @@ export default function CreateTripPage() {
         createdByUid: user.uid,
         status: "draft",
         inviteCode,
+        listingUrl: listingUrlValue,
 
         totalPrice: P,
         roomCount: N,
@@ -72,7 +94,7 @@ export default function CreateTripPage() {
 
       // Add creator as manager
       await setDoc(doc(db, "trips", tripRef.id, "members", user.uid), {
-        displayName: user.email ?? "Manager",
+        displayName: getPreferredDisplayName(user),
         role: "manager",
         joinedAt: serverTimestamp(),
       });
@@ -126,6 +148,18 @@ export default function CreateTripPage() {
           <label className="label">
             Trip name
             <input className="input" value={tripName} onChange={(e) => setTripName(e.target.value)} />
+          </label>
+
+          <label className="label">
+            Listing link (Airbnb/VRBO/etc)
+            <input
+              className="input"
+              type="url"
+              inputMode="url"
+              placeholder="https://..."
+              value={listingUrl}
+              onChange={(e) => setListingUrl(e.target.value)}
+            />
           </label>
 
           <label className="label">

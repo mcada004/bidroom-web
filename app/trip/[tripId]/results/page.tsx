@@ -29,6 +29,7 @@ type Trip = {
   status: "draft" | "live" | "ended";
   totalPrice: number;
   inviteCode: string;
+  listingUrl?: string | null;
 };
 
 export default function ResultsPage() {
@@ -90,18 +91,18 @@ export default function ResultsPage() {
         );
       });
 
-      if (user) {
-        unsubMembers = onSnapshot(collection(db, "trips", tripId, "members"), (snap3) => {
+      unsubMembers = onSnapshot(
+        collection(db, "trips", tripId, "members"),
+        (snap3) => {
           setMembers(
             snap3.docs.map((d) => {
               const m = d.data() as any;
               return { uid: d.id, displayName: m.displayName ?? d.id } as Member;
             })
           );
-        });
-      } else {
-        setMembers([]);
-      }
+        },
+        () => setMembers([])
+      );
     }
 
     if (!loading) boot().catch((e: any) => setError(e?.message ?? "Failed to load"));
@@ -121,8 +122,7 @@ export default function ResultsPage() {
 
   function participantLabel(uid: string | null) {
     if (!uid) return null;
-    if (isGuestView) return "Participant";
-    return memberName[uid] ?? "(signed-in user)";
+    return memberName[uid] ?? "Participant";
   }
 
   // Live leaders per room (during live auction)
@@ -223,13 +223,20 @@ export default function ResultsPage() {
           <span className="pill">Status: {trip.status}</span>
           <span className="pill">Trip total: ${trip.totalPrice}</span>
         </div>
+        {trip.listingUrl ? (
+          <p style={{ marginTop: 12 }}>
+            <a href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
+              View listing
+            </a>
+          </p>
+        ) : null}
       </section>
 
       <section className="card">
-        {isGuestView && <div className="notice">Viewing as guest — sign in to bid</div>}
+        {isGuestView && <div className="notice">Viewing as guest — continue as guest to bid</div>}
         <div className="section-title">My status</div>
         {isGuestView ? (
-          <p className="muted">Sign in to join bidding and see your personal winning status.</p>
+          <p className="muted">Continue as guest on the trip page to bid and appear in live results.</p>
         ) : null}
         {trip.status === "draft" && <p className="muted">The auction hasn’t started yet.</p>}
 

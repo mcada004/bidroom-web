@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
@@ -16,8 +18,32 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+  const [showResetForm, setShowResetForm] = useState(false);
   const [appleHint, setAppleHint] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof FirebaseError && error.message) {
+      return error.message;
+    }
+    return fallback;
+  }
+
+  function getResetErrorMessage(code?: string) {
+    switch (code) {
+      case "auth/invalid-email":
+        return "Please enter a valid email address.";
+      case "auth/too-many-requests":
+        return "Too many requests. Please wait a bit and try again.";
+      case "auth/network-request-failed":
+        return "Network error. Check your connection and try again.";
+      default:
+        return "We couldn't send a reset link right now. Please try again.";
+    }
+  }
 
   async function handleSignUp() {
     setError(null);
@@ -25,8 +51,8 @@ export default function LoginPage() {
     try {
       await createUserWithEmailAndPassword(auth, email.trim(), password);
       router.push("/");
-    } catch (e: any) {
-      setError(e?.message ?? "Sign up failed");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Sign up failed"));
     } finally {
       setBusy(false);
     }
@@ -38,8 +64,8 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       router.push("/");
-    } catch (e: any) {
-      setError(e?.message ?? "Sign in failed");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Sign in failed"));
     } finally {
       setBusy(false);
     }
@@ -53,8 +79,8 @@ export default function LoginPage() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       router.push("/");
-    } catch (e: any) {
-      setError(e?.message ?? "Google sign in failed");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Google sign in failed"));
     } finally {
       setBusy(false);
     }
@@ -68,9 +94,35 @@ export default function LoginPage() {
       const provider = new OAuthProvider("apple.com");
       await signInWithPopup(auth, provider);
       router.push("/");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setAppleHint(true);
-      setError(e?.message ?? "Apple sign in failed");
+      setError(getErrorMessage(e, "Apple sign in failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePasswordReset() {
+    setResetError(null);
+    setResetSuccess(null);
+
+    const trimmedEmail = resetEmail.trim();
+    if (!trimmedEmail) {
+      setResetError("Please enter a valid email address.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      setResetSuccess("If an account exists for that email, you'll receive a reset link.");
+    } catch (e: unknown) {
+      const code = e instanceof FirebaseError ? e.code : undefined;
+      if (code === "auth/user-not-found") {
+        setResetSuccess("If an account exists for that email, you'll receive a reset link.");
+      } else {
+        setResetError(getResetErrorMessage(code));
+      }
     } finally {
       setBusy(false);
     }
@@ -127,6 +179,55 @@ export default function LoginPage() {
               autoComplete="current-password"
             />
           </label>
+
+          <button
+            type="button"
+            className="link"
+            disabled={busy}
+            onClick={() => {
+              setShowResetForm((prev) => !prev);
+              setResetError(null);
+              setResetSuccess(null);
+              if (!resetEmail.trim()) {
+                setResetEmail(email.trim());
+              }
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              color: "var(--accent)",
+              cursor: "pointer",
+              fontSize: 14,
+              textAlign: "left",
+            }}
+          >
+            Forgot password?
+          </button>
+
+          {showResetForm && (
+            <div className="stack">
+              <label className="label">
+                Reset email
+                <input
+                  className="input"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="you@email.com"
+                  autoComplete="email"
+                />
+              </label>
+
+              <div className="row">
+                <button className="button secondary" disabled={busy} onClick={handlePasswordReset}>
+                  Send reset link
+                </button>
+              </div>
+
+              {resetError && <p className="notice">{resetError}</p>}
+              {resetSuccess && <p className="notice">{resetSuccess}</p>}
+            </div>
+          )}
 
           <div className="row">
             <button className="button" disabled={busy} onClick={handleSignIn}>
