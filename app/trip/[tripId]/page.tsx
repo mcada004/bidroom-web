@@ -578,7 +578,7 @@ export default function TripPage() {
     let bidRefPath: string | null = null;
     let txStage = "start";
     let attemptedAntiSnipeUpdate = false;
-    let failureTripStatus = trip.status;
+    let failureTripStatus: string = trip.status;
     let failureCurrentBid = room.currentHighBidAmount ?? 0;
     let failureNextBid = optimisticAmount;
     let failureAuctionEnded = !!(endAtMs && nowMs >= endAtMs);
