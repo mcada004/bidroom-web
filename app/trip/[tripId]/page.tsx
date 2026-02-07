@@ -74,6 +74,28 @@ function formatTime(ms: number) {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
+type FirestoreLikeError = {
+  code?: string;
+  message?: string;
+  details?: unknown;
+};
+
+const DEBUG_BIDS = process.env.NEXT_PUBLIC_DEBUG_BIDS === "true";
+
+function extractFirestoreError(err: unknown) {
+  const asObj = (err ?? {}) as FirestoreLikeError;
+  return {
+    code: typeof asObj.code === "string" ? asObj.code : "unknown",
+    message: typeof asObj.message === "string" ? asObj.message : "Unknown Firestore error",
+    details: "details" in asObj ? asObj.details : undefined,
+  };
+}
+
+function debugBidLog(event: string, payload?: unknown) {
+  if (!DEBUG_BIDS) return;
+  console.log(`[bid-debug] ${event}`, payload ?? "");
+}
+
 export default function TripPage() {
   const params = useParams<{ tripId: string }>();
   const searchParams = useSearchParams();
@@ -419,10 +441,16 @@ export default function TripPage() {
 
     try {
       setStoredGuestDisplayName(displayName);
+      debugBidLog("continue_as_guest_start", {
+        tripId,
+        currentUserUid: user?.uid ?? null,
+        currentUserAnonymous: user?.isAnonymous ?? null,
+      });
       const nextUser = user ?? (await signInAnonymously(auth)).user;
+      const memberRef = doc(db, "trips", tripId, "members", nextUser.uid);
 
       await setDoc(
-        doc(db, "trips", tripId, "members", nextUser.uid),
+        memberRef,
         {
           displayName,
           role: nextUser.uid === trip.createdByUid ? "manager" : "participant",
@@ -430,10 +458,16 @@ export default function TripPage() {
         },
         { merge: true }
       );
+      debugBidLog("continue_as_guest_success", {
+        uid: nextUser.uid,
+        isAnonymous: nextUser.isAnonymous,
+        memberPath: memberRef.path,
+        displayName,
+      });
     } catch (e: unknown) {
-      const code = typeof e === "object" && e && "code" in e ? String((e as { code?: string }).code) : "";
-      const message =
-        typeof e === "object" && e && "message" in e ? String((e as { message?: string }).message) : "Failed to continue as guest.";
+      const parsed = extractFirestoreError(e);
+      const code = parsed.code;
+      const message = parsed.message;
 
       if (code === "auth/operation-not-allowed") {
         setGuestActionError("Anonymous sign-in is not enabled in Firebase Auth.");
@@ -442,6 +476,12 @@ export default function TripPage() {
       } else {
         setGuestActionError(message);
       }
+      debugBidLog("continue_as_guest_failed", {
+        tripId,
+        code: parsed.code,
+        message: parsed.message,
+        details: parsed.details,
+      });
     } finally {
       setBusyGuestAuth(false);
     }
@@ -454,9 +494,28 @@ export default function TripPage() {
     if (endAtMs && nowMs >= endAtMs) return alert("Auction has ended.");
 
     setBusyRoomId(room.id);
+    const tripRefPath = `trips/${tripId}`;
+    const roomRefPath = `trips/${tripId}/rooms/${room.id}`;
+    let bidRefPath: string | null = null;
+    let txStage = "start";
+    let attemptedAntiSnipeUpdate = false;
 
     try {
+      if (DEBUG_BIDS) {
+        const memberRef = doc(db, "trips", tripId, "members", user.uid);
+        const memberSnap = await getDoc(memberRef);
+        debugBidLog("bid_user_context", {
+          uid: user.uid,
+          isAnonymous: user.isAnonymous,
+          memberExists: memberSnap.exists(),
+          memberPath: memberRef.path,
+          tripPath: tripRefPath,
+          roomPath: roomRefPath,
+        });
+      }
+
       await runTransaction(db, async (tx) => {
+        txStage = "read_trip_room";
         const tripRef = doc(db, "trips", tripId);
         const roomRef = doc(db, "trips", tripId, "rooms", room.id);
 
@@ -492,8 +551,16 @@ export default function TripPage() {
         if (!isBetter && nextBid === existingAmt) throw new Error("Tie bid lost (earlier bid wins).");
 
         const bidRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
+        bidRefPath = bidRef.path;
+        debugBidLog("bid_transaction_refs", {
+          tripPath: tripRef.path,
+          roomPath: roomRef.path,
+          bidPath: bidRefPath,
+        });
+        txStage = "write_bid_doc";
         tx.set(bidRef, { amount: nextBid, bidderUid: user.uid, bidTimeMs, createdAt: serverTimestamp() });
 
+        txStage = "write_room_high_bid";
         tx.update(roomRef, {
           currentHighBidAmount: nextBid,
           currentHighBidderUid: user.uid,
@@ -506,13 +573,37 @@ export default function TripPage() {
         if (endAt?.toMillis) {
           const endMs = endAt.toMillis();
           const msLeft = endMs - bidTimeMs;
-          if (msLeft <= antiWin * 60 * 1000) {
-            tx.update(tripRef, { auctionEndAt: new Date(endMs + antiExt * 60 * 1000) });
+          const extendMs = antiExt * 60 * 1000;
+          const nextEndMs = endMs + extendMs;
+
+          // Guard trip write so bids still work even if extension config is zero/invalid.
+          if (msLeft <= antiWin * 60 * 1000 && extendMs > 0 && nextEndMs > endMs) {
+            attemptedAntiSnipeUpdate = true;
+            txStage = "write_trip_anti_snipe";
+            tx.update(tripRef, { auctionEndAt: new Date(nextEndMs) });
           }
         }
+        txStage = "commit";
       });
-    } catch (e: any) {
-      alert(e?.message ?? "Bid failed");
+      debugBidLog("bid_transaction_success", {
+        tripPath: tripRefPath,
+        roomPath: roomRefPath,
+        bidPath: bidRefPath,
+        attemptedAntiSnipeUpdate,
+      });
+    } catch (e: unknown) {
+      const parsed = extractFirestoreError(e);
+      debugBidLog("bid_transaction_failed", {
+        tripPath: tripRefPath,
+        roomPath: roomRefPath,
+        bidPath: bidRefPath,
+        attemptedAntiSnipeUpdate,
+        stage: txStage,
+        code: parsed.code,
+        message: parsed.message,
+        details: parsed.details,
+      });
+      alert(parsed.message || "Bid failed");
     } finally {
       setBusyRoomId(null);
     }

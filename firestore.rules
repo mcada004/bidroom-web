@@ -51,7 +51,10 @@ service cloud.firestore {
         resource.data.status == "live" &&
         request.resource.data.diff(resource.data).changedKeys().hasOnly(["auctionEndAt"]) &&
         request.resource.data.auctionEndAt is timestamp &&
-        request.resource.data.auctionEndAt > resource.data.auctionEndAt
+        (
+          !(resource.data.auctionEndAt is timestamp) ||
+          request.resource.data.auctionEndAt > resource.data.auctionEndAt
+        )
       );
 
       match /rooms/{roomId} {
@@ -71,9 +74,14 @@ service cloud.firestore {
             "currentHighBidAt",
             "currentHighBidTimeMs"
           ]) &&
+          request.resource.data.currentHighBidderUid is string &&
           request.resource.data.currentHighBidderUid == request.auth.uid &&
+          request.resource.data.currentHighBidAt is timestamp &&
           request.resource.data.currentHighBidAmount is number &&
-          request.resource.data.currentHighBidAmount >= resource.data.currentHighBidAmount &&
+          (
+            !(resource.data.currentHighBidAmount is number) ||
+            request.resource.data.currentHighBidAmount >= resource.data.currentHighBidAmount
+          ) &&
           request.resource.data.currentHighBidTimeMs is number &&
           (
             !(resource.data.currentHighBidTimeMs is number) ||
@@ -87,9 +95,11 @@ service cloud.firestore {
 
           // Only signed-in users can place their own bids.
           allow create: if isSignedIn() &&
+            request.resource.data.keys().hasOnly(["amount", "bidderUid", "bidTimeMs", "createdAt"]) &&
             request.resource.data.bidderUid == request.auth.uid &&
             request.resource.data.amount is number &&
-            request.resource.data.bidTimeMs is number;
+            request.resource.data.bidTimeMs is number &&
+            request.resource.data.createdAt is timestamp;
 
           // Bids are append-only.
           allow update, delete: if false;
