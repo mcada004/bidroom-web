@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  Timestamp,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -113,11 +114,11 @@ function debugBidWriteIntent(payload: {
   isAnonymous: boolean | null;
   tripPath: string;
   roomPath: string;
-  bidPayload: { amount: number; bidderUid: string; bidTimeMs: number; createdAt: string };
+  bidPayload: { amount: number; bidderUid: string; bidTimeMs: number; createdAt: Timestamp };
   roomPayload: {
     currentHighBidAmount: number;
     currentHighBidderUid: string;
-    currentHighBidAt: string;
+    currentHighBidAt: Timestamp;
     currentHighBidTimeMs: number;
   };
 }) {
@@ -594,6 +595,8 @@ export default function TripPage() {
     const tripRefPath = `trips/${tripId}`;
     const roomRefPath = `trips/${tripId}/rooms/${room.id}`;
     const bidTimeMsPreview = Date.now();
+    const createdAtPreview = Timestamp.now();
+    const currentHighBidAtPreview = Timestamp.now();
     const projectId = (auth.app.options.projectId as string | undefined) ?? (db.app.options.projectId as string | undefined) ?? null;
     debugBidWriteIntent({
       projectId,
@@ -605,12 +608,12 @@ export default function TripPage() {
         amount: optimisticAmount,
         bidderUid: uid,
         bidTimeMs: bidTimeMsPreview,
-        createdAt: "serverTimestamp()",
+        createdAt: createdAtPreview,
       },
       roomPayload: {
         currentHighBidAmount: optimisticAmount,
         currentHighBidderUid: uid,
-        currentHighBidAt: "serverTimestamp()",
+        currentHighBidAt: currentHighBidAtPreview,
         currentHighBidTimeMs: bidTimeMsPreview,
       },
     });
@@ -657,12 +660,14 @@ export default function TripPage() {
         const bidTimeMs = Date.now();
         const bidRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
         bidRefPath = bidRef.path;
+        const createdAtTs = Timestamp.now();
+        const currentHighBidAtTs = Timestamp.now();
 
-        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
+        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
         const roomUpdatePayload = {
           currentHighBidAmount: nextBid,
           currentHighBidderUid: uid,
-          currentHighBidAt: serverTimestamp(),
+          currentHighBidAt: currentHighBidAtTs,
           currentHighBidTimeMs: bidTimeMs,
         };
 
@@ -769,6 +774,8 @@ export default function TripPage() {
         if (nextBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
 
         const bidTimeMs = Date.now();
+        const createdAtTs = Timestamp.now();
+        const currentHighBidAtTs = Timestamp.now();
 
         // tie-break earliest wins
         const existingAmt = Number(r.currentHighBidAmount ?? 0);
@@ -790,7 +797,7 @@ export default function TripPage() {
           bidTimeMs,
         });
 
-        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
+        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
         debugBidLog("bid_create_payload", bidCreatePayload);
         txStage = "write_bid_doc";
         tx.set(bidRef, bidCreatePayload);
@@ -798,7 +805,7 @@ export default function TripPage() {
         const roomUpdatePayload = {
           currentHighBidAmount: nextBid,
           currentHighBidderUid: uid,
-          currentHighBidAt: serverTimestamp(),
+          currentHighBidAt: currentHighBidAtTs,
           currentHighBidTimeMs: bidTimeMs,
         };
         debugBidLog("room_update_payload", roomUpdatePayload);

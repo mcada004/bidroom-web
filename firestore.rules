@@ -89,7 +89,8 @@ service cloud.firestore {
             !request.resource.data.diff(resource.data).changedKeys().hasAny(["currentHighBidAt"]) ||
             (
               request.resource.data.currentHighBidAt is timestamp &&
-              request.resource.data.currentHighBidAt == request.time
+              request.resource.data.currentHighBidAt >= request.time - duration.value(2, "m") &&
+              request.resource.data.currentHighBidAt <= request.time + duration.value(2, "m")
             )
           ) &&
           request.resource.data.currentHighBidAmount is number &&
@@ -126,7 +127,8 @@ service cloud.firestore {
               !request.resource.data.keys().hasAny(["createdAt"]) ||
               (
                 request.resource.data.createdAt is timestamp &&
-                request.resource.data.createdAt == request.time
+                request.resource.data.createdAt >= request.time - duration.value(2, "m") &&
+                request.resource.data.createdAt <= request.time + duration.value(2, "m")
               )
             );
 
