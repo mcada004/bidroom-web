@@ -46,16 +46,18 @@ service cloud.firestore {
 
       // Manager-only trip lifecycle/settings updates.
       // Also allow signed-in bidders to extend only auctionEndAt (anti-sniping).
-      allow update, delete: if (isTripManager(tripId) && hasValidListingUrl(request.resource.data)) || (
+      allow update: if (isTripManager(tripId) && hasValidListingUrl(request.resource.data)) || (
         isSignedIn() &&
         resource.data.status == "live" &&
+        resource.data.auctionEndAt is timestamp &&
         request.resource.data.diff(resource.data).changedKeys().hasOnly(["auctionEndAt"]) &&
         request.resource.data.auctionEndAt is timestamp &&
-        (
-          !(resource.data.auctionEndAt is timestamp) ||
-          request.resource.data.auctionEndAt > resource.data.auctionEndAt
-        )
+        request.time >= resource.data.auctionEndAt - duration.value(10, "m") &&
+        request.time <= resource.data.auctionEndAt &&
+        request.resource.data.auctionEndAt > resource.data.auctionEndAt &&
+        request.resource.data.auctionEndAt <= resource.data.auctionEndAt + duration.value(10, "m")
       );
+      allow delete: if isTripManager(tripId);
 
       match /rooms/{roomId} {
         // Public read for live auction viewing.
@@ -80,7 +82,7 @@ service cloud.firestore {
           request.resource.data.currentHighBidAmount is number &&
           (
             !(resource.data.currentHighBidAmount is number) ||
-            request.resource.data.currentHighBidAmount >= resource.data.currentHighBidAmount
+            request.resource.data.currentHighBidAmount > resource.data.currentHighBidAmount
           ) &&
           request.resource.data.currentHighBidTimeMs is number &&
           (
@@ -95,6 +97,11 @@ service cloud.firestore {
 
           // Only signed-in users can place their own bids.
           allow create: if isSignedIn() &&
+            tripDoc(tripId).data.status == "live" &&
+            (
+              !(tripDoc(tripId).data.auctionEndAt is timestamp) ||
+              request.time <= tripDoc(tripId).data.auctionEndAt
+            ) &&
             request.resource.data.keys().hasOnly(["amount", "bidderUid", "bidTimeMs", "createdAt"]) &&
             request.resource.data.bidderUid == request.auth.uid &&
             request.resource.data.amount is number &&
