@@ -91,6 +91,7 @@ declare global {
 }
 
 const DEBUG_BIDS = process.env.NEXT_PUBLIC_DEBUG_BIDS === "true";
+const DEBUG_BID_SPLIT = process.env.NEXT_PUBLIC_DEBUG_BID_SPLIT === "true";
 
 function extractFirestoreError(err: unknown) {
   const asObj = (err ?? {}) as FirestoreLikeError;
@@ -623,6 +624,89 @@ export default function TripPage() {
     let failureAuctionEnded = !!(endAtMs && nowMs >= endAtMs);
 
     try {
+      if (DEBUG_BID_SPLIT) {
+        const tripRef = doc(db, "trips", tripId);
+        const roomRef = doc(db, "trips", tripId, "rooms", room.id);
+
+        txStage = "split_read_trip_room";
+        const [tripSnap, roomSnap] = await Promise.all([getDoc(tripRef), getDoc(roomRef)]);
+        if (!tripSnap.exists() || !roomSnap.exists()) throw new Error("Missing trip/room");
+
+        const t = tripSnap.data() as any;
+        const r = roomSnap.data() as any;
+        const txNowMs = Date.now();
+
+        const totalPrice = Number(t.totalPrice ?? 0);
+        const bidIncrement = Number(t.bidIncrement ?? 20);
+        const current = Number(r.currentHighBidAmount ?? 0);
+        const starting = Number(r.startingPrice ?? 0);
+        const nextBid = current === 0 ? Math.max(starting, 1) : current + bidIncrement;
+        const txEndRaw = t.auctionEndAt ?? null;
+        const txEndMs = txEndRaw && typeof txEndRaw.toMillis === "function" ? txEndRaw.toMillis() : null;
+
+        failureTripStatus = String(t.status ?? "unknown");
+        failureCurrentBid = current;
+        failureNextBid = nextBid;
+        failureAuctionEnded = txEndMs !== null ? txNowMs > txEndMs : false;
+
+        const sumOther = rooms.reduce((sum, rr) => (rr.id === room.id ? sum : sum + (rr.currentHighBidAmount || 0)), 0);
+        const maxAllowed = Math.max(0, totalPrice - sumOther);
+        if (nextBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
+        if (nextBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
+
+        const bidTimeMs = Date.now();
+        const bidRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
+        bidRefPath = bidRef.path;
+
+        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
+        const roomUpdatePayload = {
+          currentHighBidAmount: nextBid,
+          currentHighBidderUid: uid,
+          currentHighBidAt: serverTimestamp(),
+          currentHighBidTimeMs: bidTimeMs,
+        };
+
+        debugBidLog("bid_split_payloads", {
+          bidPath: bidRef.path,
+          roomPath: roomRef.path,
+          bidPayload: bidCreatePayload,
+          roomPayload: roomUpdatePayload,
+        });
+
+        txStage = "split_bid_create";
+        try {
+          await setDoc(bidRef, bidCreatePayload);
+          debugBidLog("bid_split_step_ok", { step: "bid_create", path: bidRef.path });
+        } catch (err: unknown) {
+          const parsed = extractFirestoreError(err);
+          debugBidLog("bid_split_step_error", {
+            step: "bid_create",
+            "error.code": parsed.code,
+            "error.message": parsed.message,
+            path: bidRef.path,
+          });
+          throw err;
+        }
+
+        txStage = "split_room_update";
+        try {
+          await updateDoc(roomRef, roomUpdatePayload);
+          debugBidLog("bid_split_step_ok", { step: "room_update", path: roomRef.path });
+        } catch (err: unknown) {
+          const parsed = extractFirestoreError(err);
+          debugBidLog("bid_split_step_error", {
+            step: "room_update",
+            "error.code": parsed.code,
+            "error.message": parsed.message,
+            path: roomRef.path,
+          });
+          throw err;
+        }
+
+        debugBidLog("bid_split_success", { bidPath: bidRef.path, roomPath: roomRef.path });
+        return;
+      }
+
       if (DEBUG_BIDS) {
         const memberRef = doc(db, "trips", tripId, "members", uid);
         const memberSnap = await getDoc(memberRef);

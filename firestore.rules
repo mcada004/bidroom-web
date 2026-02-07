@@ -70,15 +70,28 @@ service cloud.firestore {
         // Signed-in bidders can only update current-high-bid tracking fields.
         allow update: if isTripManager(tripId) || (
           isSignedIn() &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly([
-            "currentHighBidAmount",
-            "currentHighBidderUid",
-            "currentHighBidAt",
-            "currentHighBidTimeMs"
-          ]) &&
+          (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly([
+              "currentHighBidAmount",
+              "currentHighBidderUid",
+              "currentHighBidTimeMs"
+            ]) ||
+            request.resource.data.diff(resource.data).changedKeys().hasOnly([
+              "currentHighBidAmount",
+              "currentHighBidderUid",
+              "currentHighBidAt",
+              "currentHighBidTimeMs"
+            ])
+          ) &&
           request.resource.data.currentHighBidderUid is string &&
           request.resource.data.currentHighBidderUid == request.auth.uid &&
-          request.resource.data.currentHighBidAt == request.time &&
+          (
+            !request.resource.data.diff(resource.data).changedKeys().hasAny(["currentHighBidAt"]) ||
+            (
+              request.resource.data.currentHighBidAt is timestamp &&
+              request.resource.data.currentHighBidAt == request.time
+            )
+          ) &&
           request.resource.data.currentHighBidAmount is number &&
           (
             !(resource.data.currentHighBidAmount is number) ||
@@ -102,11 +115,20 @@ service cloud.firestore {
               !(tripDoc(tripId).data.auctionEndAt is timestamp) ||
               request.time <= tripDoc(tripId).data.auctionEndAt
             ) &&
-            request.resource.data.keys().hasOnly(["amount", "bidderUid", "bidTimeMs", "createdAt"]) &&
+            (
+              request.resource.data.keys().hasOnly(["amount", "bidderUid", "bidTimeMs"]) ||
+              request.resource.data.keys().hasOnly(["amount", "bidderUid", "bidTimeMs", "createdAt"])
+            ) &&
             request.resource.data.bidderUid == request.auth.uid &&
             request.resource.data.amount is number &&
             request.resource.data.bidTimeMs is number &&
-            request.resource.data.createdAt == request.time;
+            (
+              !request.resource.data.keys().hasAny(["createdAt"]) ||
+              (
+                request.resource.data.createdAt is timestamp &&
+                request.resource.data.createdAt == request.time
+              )
+            );
 
           // Bids are append-only.
           allow update, delete: if false;
