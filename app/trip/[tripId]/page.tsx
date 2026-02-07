@@ -106,6 +106,24 @@ function debugBidLog(event: string, payload?: unknown) {
   console.log(`[bid-debug] ${event}`, payload ?? "");
 }
 
+function debugBidWriteIntent(payload: {
+  projectId: string | null;
+  uid: string;
+  isAnonymous: boolean | null;
+  tripPath: string;
+  roomPath: string;
+  bidPayload: { amount: number; bidderUid: string; bidTimeMs: number; createdAt: string };
+  roomPayload: {
+    currentHighBidAmount: number;
+    currentHighBidderUid: string;
+    currentHighBidAt: string;
+    currentHighBidTimeMs: number;
+  };
+}) {
+  if (!DEBUG_BIDS) return;
+  console.log("[bid-debug] bid_write_intent_pre_tx", payload);
+}
+
 export default function TripPage() {
   const params = useParams<{ tripId: string }>();
   const searchParams = useSearchParams();
@@ -574,6 +592,27 @@ export default function TripPage() {
     setBusyRoomId(room.id);
     const tripRefPath = `trips/${tripId}`;
     const roomRefPath = `trips/${tripId}/rooms/${room.id}`;
+    const bidTimeMsPreview = Date.now();
+    const projectId = (auth.app.options.projectId as string | undefined) ?? (db.app.options.projectId as string | undefined) ?? null;
+    debugBidWriteIntent({
+      projectId,
+      uid,
+      isAnonymous: authUser?.isAnonymous ?? null,
+      tripPath: tripRefPath,
+      roomPath: roomRefPath,
+      bidPayload: {
+        amount: optimisticAmount,
+        bidderUid: uid,
+        bidTimeMs: bidTimeMsPreview,
+        createdAt: "serverTimestamp()",
+      },
+      roomPayload: {
+        currentHighBidAmount: optimisticAmount,
+        currentHighBidderUid: uid,
+        currentHighBidAt: "serverTimestamp()",
+        currentHighBidTimeMs: bidTimeMsPreview,
+      },
+    });
     debugBidLog("bid_write_paths", { tripPath: tripRefPath, roomPath: roomRefPath });
     let bidRefPath: string | null = null;
     let txStage = "start";
