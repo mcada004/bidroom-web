@@ -594,7 +594,7 @@ export default function TripPage() {
                     )
                   ) : (
                     <div style={{ marginTop: 10 }}>
-                      Winner: <strong>{leadingBidderLabel(r.winnerUid) ?? "No winner"}</strong>
+                     Winner: <strong>{leadingBidderLabel(r.winnerUid ?? null) ?? "No winner"}</strong>
                       {typeof r.winnerAmount === "number" ? ` — $${r.winnerAmount}` : ""}
                     </div>
                   )}
