@@ -13,5 +13,11 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+console.log("[firebase-config]", {
+  projectId: firebaseConfig.projectId,
+  authDomain: firebaseConfig.authDomain,
+  apiKeyLast4: firebaseConfig.apiKey ? firebaseConfig.apiKey.slice(-4) : null,
+});
+
 export const auth = getAuth(app);
 export const db = getFirestore(app);
