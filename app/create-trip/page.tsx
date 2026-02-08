@@ -103,7 +103,7 @@ export default function CreateTripPage() {
     const activeUser = auth.currentUser;
     if (!activeUser?.uid) {
       setBusy(false);
-      setError("Please sign in again.");
+      setError("Not signed in (auth.currentUser missing)");
       return;
     }
 
@@ -144,6 +144,19 @@ export default function CreateTripPage() {
         payload.listingUrl = listingUrlValue;
       }
 
+      const writeUser = auth.currentUser;
+      if (!writeUser?.uid) {
+        setError("Not signed in (auth.currentUser missing)");
+        setBusy(false);
+        return;
+      }
+      payload.createdByUid = writeUser.uid;
+
+      console.log("[createTrip] auth snapshot", {
+        projectId: auth.app.options.projectId,
+        uid: auth.currentUser?.uid ?? null,
+        isAnonymous: auth.currentUser?.isAnonymous ?? null,
+      });
       console.log("[createTrip] payload", payload);
 
       const tripRef = await addDoc(collection(db, "trips"), payload);
