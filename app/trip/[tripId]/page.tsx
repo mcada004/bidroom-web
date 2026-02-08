@@ -678,39 +678,11 @@ export default function TripPage() {
           bidPayload: bidCreatePayload,
           roomPayload: roomUpdatePayload,
         });
-
-        txStage = "split_bid_create";
-        try {
-          await setDoc(bidRef, bidCreatePayload);
-          debugBidLog("bid_split_step_ok", { step: "bid_create", path: bidRef.path });
-        } catch (err: unknown) {
-          const parsed = extractFirestoreError(err);
-          debugBidLog("bid_split_step_error", {
-            step: "bid_create",
-            "error.code": parsed.code,
-            "error.message": parsed.message,
-            path: bidRef.path,
-          });
-          throw err;
-        }
-
-        txStage = "split_room_update";
-        try {
-          await updateDoc(roomRef, roomUpdatePayload);
-          debugBidLog("bid_split_step_ok", { step: "room_update", path: roomRef.path });
-        } catch (err: unknown) {
-          const parsed = extractFirestoreError(err);
-          debugBidLog("bid_split_step_error", {
-            step: "room_update",
-            "error.code": parsed.code,
-            "error.message": parsed.message,
-            path: roomRef.path,
-          });
-          throw err;
-        }
-
-        debugBidLog("bid_split_success", { bidPath: bidRef.path, roomPath: roomRef.path });
-        return;
+        debugBidLog("bid_split_readonly_preview", {
+          reason: "Split mode is read-only; writes are executed only in the main transaction path.",
+          bidPath: bidRef.path,
+          roomPath: roomRef.path,
+        });
       }
 
       if (DEBUG_BIDS) {
