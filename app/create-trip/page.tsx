@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "@/src/lib/firebase";
+import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
 import { getPreferredDisplayName } from "@/src/lib/authGuests";
 
@@ -19,6 +19,19 @@ function makeInviteCode(length = 6) {
   let out = "";
   for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
+}
+
+type FirestoreLikeError = {
+  code?: string;
+  message?: string;
+};
+
+function extractFirestoreError(err: unknown) {
+  const asObj = (err ?? {}) as FirestoreLikeError;
+  return {
+    code: typeof asObj.code === "string" ? asObj.code : "unknown",
+    message: typeof asObj.message === "string" ? asObj.message : "Unknown Firestore error",
+  };
 }
 
 export default function CreateTripPage() {
@@ -58,21 +71,47 @@ export default function CreateTripPage() {
     setBusy(true);
     setError(null);
 
+    const P = Number(totalPrice);
+    const N = Number(roomCount);
+    let listingUrlValue: string | null = null;
     try {
-      const P = Number(totalPrice);
-      const N = Number(roomCount);
-      const listingUrlValue = parseListingUrlOrNull(listingUrl);
+      listingUrlValue = parseListingUrlOrNull(listingUrl);
+    } catch (err) {
+      const parsed = extractFirestoreError(err);
+      setBusy(false);
+      setError(parsed.message);
+      return;
+    }
 
-      if (!P || P <= 0) throw new Error("Total trip price must be > 0");
-      if (!N || N < 1) throw new Error("Room count must be at least 1");
+    if (!P || P <= 0) {
+      setBusy(false);
+      setError("Total trip price must be > 0");
+      return;
+    }
+    if (!N || N < 1) {
+      setBusy(false);
+      setError("Room count must be at least 1");
+      return;
+    }
 
-      const inviteCode = makeInviteCode(6);
-      const startingPricePerRoom = Math.ceil(P / N);
+    const activeUser = auth.currentUser;
+    if (!activeUser?.uid) {
+      setBusy(false);
+      setError("Please sign in again.");
+      return;
+    }
 
-      // Create trip doc
+    const uid = activeUser.uid;
+    const inviteCode = makeInviteCode(6);
+    const startingPricePerRoom = Math.ceil(P / N);
+    const normalizedTripName = tripName.trim() || "New Trip";
+    let createdTripId: string | null = null;
+
+    // STEP 1: create trip doc + manager membership + user index.
+    try {
       const tripRef = await addDoc(collection(db, "trips"), {
-        name: tripName.trim() || "New Trip",
-        createdByUid: user.uid,
+        name: normalizedTripName,
+        createdByUid: uid,
         status: "draft",
         inviteCode,
         listingUrl: listingUrlValue,
@@ -96,26 +135,42 @@ export default function CreateTripPage() {
         createdAt: serverTimestamp(),
       });
 
-      // Create creator membership + user index + rooms.
-      const batch = writeBatch(db);
+      createdTripId = tripRef.id;
 
-      batch.set(doc(db, "trips", tripRef.id, "members", user.uid), {
-        displayName: getPreferredDisplayName(user),
+      const userIndexBatch = writeBatch(db);
+      userIndexBatch.set(doc(db, "trips", createdTripId, "members", uid), {
+        displayName: getPreferredDisplayName(activeUser),
         role: "manager",
         joinedAt: serverTimestamp(),
       });
-
-      batch.set(doc(db, "users", user.uid, "myTrips", tripRef.id), {
-        tripId: tripRef.id,
+      userIndexBatch.set(doc(db, "users", uid, "myTrips", createdTripId), {
+        tripId: createdTripId,
         inviteCode,
-        name: tripName.trim() || "New Trip",
+        name: normalizedTripName,
         status: "draft",
         updatedAt: serverTimestamp(),
       });
+      await userIndexBatch.commit();
+    } catch (err) {
+      const parsed = extractFirestoreError(err);
+      console.error("[createTrip] trip_create failed", { code: parsed.code, message: parsed.message });
+      setError(`trip_create failed [${parsed.code}]: ${parsed.message}`);
+      setBusy(false);
+      return;
+    }
+    if (!createdTripId) {
+      setError("trip_create failed [unknown]: Missing trip id after creation");
+      setBusy(false);
+      return;
+    }
+    const tripId = createdTripId;
 
+    // STEP 2: create rooms after trip doc exists.
+    try {
+      const roomsBatch = writeBatch(db);
       for (let i = 1; i <= N; i++) {
-        const roomDoc = doc(collection(db, "trips", tripRef.id, "rooms"));
-        batch.set(roomDoc, {
+        const roomDoc = doc(collection(db, "trips", tripId, "rooms"));
+        roomsBatch.set(roomDoc, {
           name: `Room ${i}`,
           capacity: 2,
           description: "",
@@ -129,12 +184,17 @@ export default function CreateTripPage() {
           winnerUid: null,
         });
       }
+      await roomsBatch.commit();
+    } catch (err) {
+      const parsed = extractFirestoreError(err);
+      console.error("[createTrip] rooms_create failed", { code: parsed.code, message: parsed.message });
+      setError(`rooms_create failed [${parsed.code}]: ${parsed.message}`);
+      setBusy(false);
+      return;
+    }
 
-      await batch.commit();
-
-      router.push(`/trip/${tripRef.id}?code=${inviteCode}`);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to create trip");
+    try {
+      router.push(`/trip/${tripId}?code=${inviteCode}`);
     } finally {
       setBusy(false);
     }
