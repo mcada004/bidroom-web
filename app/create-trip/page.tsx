@@ -8,6 +8,7 @@ import {
   collection,
   doc,
   serverTimestamp,
+  setDoc,
   writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
@@ -107,76 +108,65 @@ export default function CreateTripPage() {
       return;
     }
 
-    const uid = activeUser.uid;
     const inviteCode = makeInviteCode(6);
     const startingPricePerRoom = Math.ceil(P / N);
     const normalizedTripName = tripName.trim() || "New Trip";
-    let createdTripId: string | null = null;
+    const payload = {
+      name: normalizedTripName,
+      status: "draft",
+      inviteCode,
+      listingTitle: null,
+      listingImageUrl: null,
+      listingBedrooms: null,
+      listingBeds: null,
+      listingBaths: null,
 
-    // STEP 1: create trip doc + manager membership + user index.
+      totalPrice: P,
+      roomCount: N,
+      startingPricePerRoom,
+
+      // bidding rules
+      bidIncrement: 20,
+      auctionDurationHours: Number(durationHours) || 24,
+      antiSnipeWindowMinutes: 10,
+      antiSnipeExtendMinutes: 10,
+      maxRoomsPerUser: 1,
+
+      createdAt: serverTimestamp(),
+    } as Record<string, unknown>;
+
+    if (listingUrlValue) {
+      payload.listingUrl = listingUrlValue;
+    }
+
+    const writeUser = auth.currentUser;
+    if (!writeUser?.uid) {
+      setError("Not signed in (auth.currentUser missing)");
+      setBusy(false);
+      return;
+    }
+    payload.createdByUid = writeUser.uid;
+
+    const payloadTypes = Object.fromEntries(
+      Object.entries(payload).map(([key, value]) => {
+        const valueType =
+          value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+        return [key, valueType];
+      })
+    );
+
+    console.log("[createTrip] trip_create preflight", {
+      uid: auth.currentUser?.uid ?? null,
+      isAnonymous: auth.currentUser?.isAnonymous ?? null,
+      projectId: db.app.options.projectId,
+      payloadKeys: Object.keys(payload),
+      payloadTypes,
+    });
+
+    let tripId = "";
     try {
-      const payload = {
-        name: normalizedTripName,
-        createdByUid: uid,
-        status: "draft",
-        inviteCode,
-        listingTitle: null,
-        listingImageUrl: null,
-        listingBedrooms: null,
-        listingBeds: null,
-        listingBaths: null,
-
-        totalPrice: P,
-        roomCount: N,
-        startingPricePerRoom,
-
-        // bidding rules
-        bidIncrement: 20,
-        auctionDurationHours: Number(durationHours) || 24,
-        antiSnipeWindowMinutes: 10,
-        antiSnipeExtendMinutes: 10,
-        maxRoomsPerUser: 1,
-
-        createdAt: serverTimestamp(),
-      } as Record<string, unknown>;
-
-      if (listingUrlValue) {
-        payload.listingUrl = listingUrlValue;
-      }
-
-      const writeUser = auth.currentUser;
-      if (!writeUser?.uid) {
-        setError("Not signed in (auth.currentUser missing)");
-        setBusy(false);
-        return;
-      }
-      payload.createdByUid = writeUser.uid;
-
-      console.log("[createTrip] auth snapshot", {
-        projectId: auth.app.options.projectId,
-        uid: auth.currentUser?.uid ?? null,
-        isAnonymous: auth.currentUser?.isAnonymous ?? null,
-      });
-      console.log("[createTrip] payload", payload);
-
       const tripRef = await addDoc(collection(db, "trips"), payload);
-
-      createdTripId = tripRef.id;
-
-      const userIndexBatch = writeBatch(db);
-      userIndexBatch.set(doc(db, "trips", createdTripId, "members", uid), {
-        displayName: getPreferredDisplayName(activeUser),
-        role: "manager",
-        joinedAt: serverTimestamp(),
-      });
-      userIndexBatch.set(doc(db, "users", uid, "myTrips", createdTripId), {
-        tripId: createdTripId,
-        inviteCode,
-        name: normalizedTripName,
-        status: "draft",
-        updatedAt: serverTimestamp(),
-      });
-      await userIndexBatch.commit();
+      tripId = tripRef.id;
     } catch (err) {
       const parsed = extractFirestoreError(err);
       console.error("[createTrip] trip_create failed", { code: parsed.code, message: parsed.message });
@@ -184,14 +174,23 @@ export default function CreateTripPage() {
       setBusy(false);
       return;
     }
-    if (!createdTripId) {
-      setError("trip_create failed [unknown]: Missing trip id after creation");
+
+    // STEP 2: create creator membership after trip doc exists.
+    try {
+      await setDoc(doc(db, "trips", tripId, "members", writeUser.uid), {
+        displayName: getPreferredDisplayName(writeUser),
+        role: "manager",
+        joinedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      const parsed = extractFirestoreError(err);
+      console.error("[createTrip] membership_create failed", { code: parsed.code, message: parsed.message });
+      setError(`membership_create failed [${parsed.code}]: ${parsed.message}`);
       setBusy(false);
       return;
     }
-    const tripId = createdTripId;
 
-    // STEP 2: create rooms after trip doc exists.
+    // STEP 3: create rooms after trip doc exists.
     try {
       const roomsBatch = writeBatch(db);
       for (let i = 1; i <= N; i++) {
@@ -217,6 +216,20 @@ export default function CreateTripPage() {
       setError(`rooms_create failed [${parsed.code}]: ${parsed.message}`);
       setBusy(false);
       return;
+    }
+
+    // Non-blocking index write: useful for My Trips when rules include /users/{uid}/myTrips.
+    try {
+      await setDoc(doc(db, "users", writeUser.uid, "myTrips", tripId), {
+        tripId,
+        inviteCode,
+        name: normalizedTripName,
+        status: "draft",
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      const parsed = extractFirestoreError(err);
+      console.warn("[createTrip] user_index_create failed", { code: parsed.code, message: parsed.message });
     }
 
     try {
