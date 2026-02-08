@@ -18,6 +18,14 @@ type Trip = {
   inviteCode: string;
   createdByUid: string;
   listingUrl?: string | null;
+  listingPreview?: ListingPreview | null;
+  listingPreviewUpdatedAt?: unknown;
+  listingPreviewError?: string | null;
+  listingTitle?: string | null;
+  listingImageUrl?: string | null;
+  listingBedrooms?: number | null;
+  listingBeds?: number | null;
+  listingBaths?: number | null;
 
   totalPrice: number;
   auctionDurationHours: number;
@@ -25,6 +33,20 @@ type Trip = {
 
   antiSnipeWindowMinutes: number;
   antiSnipeExtendMinutes: number;
+};
+
+type ListingPreview = {
+  provider: "searchapi";
+  platform: "airbnb" | "vrbo";
+  listingId: string | null;
+  listingUrl: string;
+  sourceUrl: string | null;
+  title: string | null;
+  bedrooms: number | null;
+  beds: number | null;
+  bathrooms: number | null;
+  primaryPhotoUrl: string | null;
+  refreshedAt: string;
 };
 
 type Room = {
@@ -48,6 +70,11 @@ export default function TripSettingsPage() {
   // form state
   const [name, setName] = useState("");
   const [listingUrl, setListingUrl] = useState("");
+  const [listingTitle, setListingTitle] = useState("");
+  const [listingImageUrl, setListingImageUrl] = useState("");
+  const [listingBedrooms, setListingBedrooms] = useState("");
+  const [listingBeds, setListingBeds] = useState("");
+  const [listingBaths, setListingBaths] = useState("");
   const [totalPrice, setTotalPrice] = useState<number>(0);
   const [durationHours, setDurationHours] = useState<number>(24);
   const [bidIncrement, setBidIncrement] = useState<number>(20);
@@ -55,6 +82,8 @@ export default function TripSettingsPage() {
   const [antiExt, setAntiExt] = useState<number>(10);
 
   const [saving, setSaving] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   function parseListingUrlOrNull(raw: string) {
     const value = raw.trim();
@@ -72,6 +101,22 @@ export default function TripSettingsPage() {
     }
 
     return value;
+  }
+
+  function optionalCountToInput(value: unknown) {
+    return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+  }
+
+  function parseOptionalCountOrNull(raw: string, label: string) {
+    const value = raw.trim();
+    if (!value) return null;
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error(`${label} must be a number greater than or equal to 0`);
+    }
+
+    return parsed;
   }
 
   const isManager = useMemo(() => {
@@ -105,6 +150,11 @@ export default function TripSettingsPage() {
         // hydrate form when trip loads/changes
         setName(t.name ?? "");
         setListingUrl(typeof t.listingUrl === "string" ? t.listingUrl : "");
+        setListingTitle(typeof t.listingTitle === "string" ? t.listingTitle : "");
+        setListingImageUrl(typeof t.listingImageUrl === "string" ? t.listingImageUrl : "");
+        setListingBedrooms(optionalCountToInput(t.listingBedrooms));
+        setListingBeds(optionalCountToInput(t.listingBeds));
+        setListingBaths(optionalCountToInput(t.listingBaths));
         setTotalPrice(Number(t.totalPrice ?? 0));
         setDurationHours(Number(t.auctionDurationHours ?? 24));
         setBidIncrement(Number(t.bidIncrement ?? 20));
@@ -143,10 +193,20 @@ export default function TripSettingsPage() {
     setSaving(true);
     try {
       const listingUrlValue = parseListingUrlOrNull(listingUrl);
+      const listingBedroomsValue = parseOptionalCountOrNull(listingBedrooms, "Bedrooms");
+      const listingBedsValue = parseOptionalCountOrNull(listingBeds, "Beds");
+      const listingBathsValue = parseOptionalCountOrNull(listingBaths, "Baths");
+      const currentListingUrl = typeof trip.listingUrl === "string" ? trip.listingUrl : null;
+      const listingChanged = listingUrlValue !== currentListingUrl;
 
       await updateDoc(doc(db, "trips", tripId), {
         name: name.trim() || "Trip",
         listingUrl: listingUrlValue,
+        listingTitle: listingChanged ? null : listingTitle || null,
+        listingImageUrl: listingChanged ? null : listingImageUrl || null,
+        listingBedrooms: listingBedroomsValue,
+        listingBeds: listingBedsValue,
+        listingBaths: listingBathsValue,
         totalPrice: Number(totalPrice),
         auctionDurationHours: Number(durationHours),
         bidIncrement: Number(bidIncrement),
@@ -154,11 +214,71 @@ export default function TripSettingsPage() {
         antiSnipeExtendMinutes: Number(antiExt),
       });
 
+      if (listingChanged) {
+        setListingTitle("");
+        setListingImageUrl("");
+      }
+      setPreviewError(null);
+
       alert("Saved.");
     } catch (e: any) {
       alert(e?.message ?? "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function previewListing() {
+    if (!trip || !user) return;
+
+    if (!isManager) return alert("Only the trip manager can preview listings.");
+    if (trip.status !== "draft") return alert("Listing preview is editable in DRAFT for now.");
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const listingUrlValue = parseListingUrlOrNull(listingUrl);
+      if (!listingUrlValue) throw new Error("Add a listing URL before previewing.");
+
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/listing-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ tripId, listingUrl: listingUrlValue }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        preview?: ListingPreview;
+      };
+      if (!response.ok) throw new Error(payload.error ?? "Preview unavailable.");
+      const nextPreview = payload.preview;
+
+      const nextTitle = nextPreview?.title?.trim() ?? "";
+      const nextImageUrl = nextPreview?.primaryPhotoUrl?.trim() ?? "";
+      const nextBedrooms = optionalCountToInput(nextPreview?.bedrooms);
+      const nextBeds = optionalCountToInput(nextPreview?.beds);
+      const nextBaths = optionalCountToInput(nextPreview?.bathrooms);
+
+      setListingTitle(nextTitle);
+      setListingImageUrl(nextImageUrl);
+      setListingBedrooms(nextBedrooms);
+      setListingBeds(nextBeds);
+      setListingBaths(nextBaths);
+
+      if (!nextTitle && !nextImageUrl && !nextBedrooms && !nextBeds && !nextBaths) {
+        setPreviewError("Preview returned no listing metadata.");
+      }
+    } catch (e: any) {
+      const message = e?.message ?? "Preview unavailable.";
+      const isValidationError =
+        typeof message === "string" &&
+        (message.startsWith("Listing link") || message.startsWith("Add a listing URL"));
+      setPreviewError(isValidationError ? message : "Preview unavailable.");
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -220,6 +340,95 @@ export default function TripSettingsPage() {
               disabled={!isManager || trip.status !== "draft"}
             />
           </label>
+
+          {listingUrl.trim() ? (
+            <div className="row">
+              <button
+                onClick={previewListing}
+                disabled={!isManager || trip.status !== "draft" || previewLoading || saving}
+                className="button secondary"
+                type="button"
+              >
+                {previewLoading ? "Refreshing preview…" : "Refresh listing preview"}
+              </button>
+              <span className="muted" style={{ fontSize: 13 }}>
+                Pulls title, photo, bedrooms, beds, and baths
+              </span>
+            </div>
+          ) : null}
+
+          {previewError ? <div className="notice">{previewError}</div> : null}
+
+          {listingTitle || listingImageUrl ? (
+            <div
+              className="list-item"
+              style={{ padding: 14, display: "grid", gap: 10, alignItems: "start" }}
+            >
+              {listingImageUrl ? (
+                <img
+                  src={listingImageUrl}
+                  alt={listingTitle || "Listing preview"}
+                  style={{
+                    width: "100%",
+                    maxWidth: 420,
+                    borderRadius: 10,
+                    border: "1px solid var(--line)",
+                    objectFit: "cover",
+                    maxHeight: 260,
+                  }}
+                />
+              ) : null}
+              <div>
+                <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Listing preview
+                </div>
+                <div>{listingTitle || "Title unavailable"}</div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="section-title">Listing details (optional)</div>
+
+          <div className="grid-2">
+            <label className="label">
+              Bedrooms
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="any"
+                value={listingBedrooms}
+                onChange={(e) => setListingBedrooms(e.target.value)}
+                disabled={!isManager || trip.status !== "draft"}
+              />
+            </label>
+
+            <label className="label">
+              Beds
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="any"
+                value={listingBeds}
+                onChange={(e) => setListingBeds(e.target.value)}
+                disabled={!isManager || trip.status !== "draft"}
+              />
+            </label>
+
+            <label className="label">
+              Baths
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="any"
+                value={listingBaths}
+                onChange={(e) => setListingBaths(e.target.value)}
+                disabled={!isManager || trip.status !== "draft"}
+              />
+            </label>
+          </div>
 
           <label className="label">
             Total trip price ($)

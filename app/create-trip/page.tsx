@@ -77,6 +77,11 @@ export default function CreateTripPage() {
         status: "draft",
         inviteCode,
         listingUrl: listingUrlValue,
+        listingTitle: null,
+        listingImageUrl: null,
+        listingBedrooms: null,
+        listingBeds: null,
+        listingBaths: null,
 
         totalPrice: P,
         roomCount: N,

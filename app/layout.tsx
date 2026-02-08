@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/src/context/AuthContext";
+import Header from "@/src/components/Header";
 
 export const metadata: Metadata = {
   title: "Bidroom",
@@ -17,13 +18,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <div className="app-shell">
-            <header className="top-nav">
-              <div className="brand">Bidroom</div>
-              <div className="nav-actions">
-                <span>Room auctions</span>
-                <span className="pill">Preview</span>
-              </div>
-            </header>
+            <Header />
             {children}
           </div>
         </AuthProvider>

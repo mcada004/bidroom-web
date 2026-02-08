@@ -50,6 +50,11 @@ type Trip = {
   status: "draft" | "live" | "ended";
   inviteCode: string;
   listingUrl?: string | null;
+  listingTitle?: string | null;
+  listingImageUrl?: string | null;
+  listingBedrooms?: number | null;
+  listingBeds?: number | null;
+  listingBaths?: number | null;
 
   createdByUid: string;
 
@@ -73,6 +78,11 @@ function formatTime(ms: number) {
   const s = total % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function formatListingCount(value: number | null | undefined, singularLabel: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return `${value} ${singularLabel}${value === 1 ? "" : "s"}`;
 }
 
 type FirestoreLikeError = {
@@ -146,6 +156,8 @@ export default function TripPage() {
   const [guestActionError, setGuestActionError] = useState<string | null>(null);
   const [bidAuthError, setBidAuthError] = useState<string | null>(null);
   const [bidActionError, setBidActionError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -167,6 +179,12 @@ export default function TripPage() {
       delete window.__bidroomAuth;
     };
   }, []);
+
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
 
   const isManager = useMemo(() => !!(user && trip && user.uid === trip.createdByUid), [user, trip]);
 
@@ -851,6 +869,22 @@ export default function TripPage() {
     }
   }
 
+  async function copyShareLink(shareUrl: string) {
+    if (typeof window === "undefined" || !window.navigator?.clipboard?.writeText) {
+      setCopyError("Couldn’t copy — please copy manually");
+      setCopyState("idle");
+      return;
+    }
+    try {
+      await window.navigator.clipboard.writeText(shareUrl);
+      setCopyError(null);
+      setCopyState("copied");
+    } catch {
+      setCopyError("Couldn’t copy — please copy manually");
+      setCopyState("idle");
+    }
+  }
+
   if (loading) return <main className="page">Auth loading…</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
@@ -862,6 +896,16 @@ export default function TripPage() {
         : "00:00:00"
       : null;
   const authReadyUser = auth.currentUser;
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+  const listingStats = [
+    formatListingCount(trip.listingBedrooms, "bedroom"),
+    formatListingCount(trip.listingBeds, "bed"),
+    formatListingCount(trip.listingBaths, "bath"),
+  ].filter((value): value is string => Boolean(value));
+  const hasListingPreviewData = Boolean(trip.listingImageUrl || trip.listingTitle);
+  const shouldShowListingPreviewCard = Boolean(
+    hasListingPreviewData || listingStats.length > 0 || trip.listingUrl
+  );
 
   return (
     <main className="page">
@@ -876,7 +920,17 @@ export default function TripPage() {
 
       <section className="card">
         <div className="section-title">Share link</div>
-        <div className="code-block">{typeof window !== "undefined" ? window.location.href : ""}</div>
+        <div className="code-block">{shareUrl}</div>
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="button secondary" onClick={() => copyShareLink(shareUrl)}>
+            {copyState === "copied" ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+        {copyError ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            {copyError}
+          </p>
+        ) : null}
         {trip.listingUrl ? (
           <div style={{ marginTop: 12 }}>
             <a href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
@@ -957,6 +1011,51 @@ export default function TripPage() {
           </div>
         )}
       </section>
+
+      {shouldShowListingPreviewCard ? (
+        <section className="card section">
+          <div className="section-title">Listing preview</div>
+
+          {hasListingPreviewData ? (
+            <div style={{ display: "grid", gap: 14 }}>
+              {trip.listingImageUrl ? (
+                <img
+                  src={trip.listingImageUrl}
+                  alt={trip.listingTitle || "Listing preview"}
+                  style={{
+                    width: "100%",
+                    maxWidth: 520,
+                    borderRadius: 12,
+                    border: "1px solid var(--line)",
+                    maxHeight: 320,
+                    objectFit: "cover",
+                  }}
+                />
+              ) : null}
+              <div style={{ display: "grid", gap: 8 }}>
+                <strong>{trip.listingTitle || "Listing title unavailable"}</strong>
+                {trip.listingUrl ? (
+                  <a className="link" href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
+                    View full listing
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : trip.listingUrl ? (
+            <div className="notice">Preview unavailable — site blocks scraping</div>
+          ) : null}
+
+          {listingStats.length > 0 ? (
+            <div className="row" style={{ marginTop: 12 }}>
+              {listingStats.map((value) => (
+                <span key={value} className="pill">
+                  {value}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="card section">
         <div className="section-title">Rooms</div>
