@@ -8,7 +8,6 @@ import {
   collection,
   doc,
   serverTimestamp,
-  setDoc,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
@@ -97,15 +96,22 @@ export default function CreateTripPage() {
         createdAt: serverTimestamp(),
       });
 
-      // Add creator as manager
-      await setDoc(doc(db, "trips", tripRef.id, "members", user.uid), {
+      // Create creator membership + user index + rooms.
+      const batch = writeBatch(db);
+
+      batch.set(doc(db, "trips", tripRef.id, "members", user.uid), {
         displayName: getPreferredDisplayName(user),
         role: "manager",
         joinedAt: serverTimestamp(),
       });
 
-      // Create rooms automatically
-      const batch = writeBatch(db);
+      batch.set(doc(db, "users", user.uid, "myTrips", tripRef.id), {
+        tripId: tripRef.id,
+        inviteCode,
+        name: tripName.trim() || "New Trip",
+        status: "draft",
+        updatedAt: serverTimestamp(),
+      });
 
       for (let i = 1; i <= N; i++) {
         const roomDoc = doc(collection(db, "trips", tripRef.id, "rooms"));

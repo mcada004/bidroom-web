@@ -17,20 +17,28 @@ export default function Header() {
 
   return (
     <header className="top-nav">
-      <Link className="brand" href="/">
-        Bidroom
-      </Link>
+      <div className="nav-left">
+        <Link className="brand" href="/">
+          Bidroom
+        </Link>
+
+        {!loading && user ? (
+          <nav className="nav-menu" aria-label="Primary">
+            <Link className="pill" href="/my-trips">
+              My Trips
+            </Link>
+            <Link className="pill" href="/create-trip">
+              Create Trip
+            </Link>
+          </nav>
+        ) : null}
+      </div>
 
       <div className="nav-actions">
         {loading ? null : user ? (
-          <>
-            <Link className="button ghost" href="/create-trip">
-              Create trip
-            </Link>
-            <button className="button secondary" onClick={handleSignOut}>
-              Sign out
-            </button>
-          </>
+          <button className="button secondary" onClick={handleSignOut}>
+            Sign out
+          </button>
         ) : (
           <Link className="button secondary" href="/login">
             Sign in

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
@@ -35,20 +35,31 @@ type Trip = {
 export default function ResultsPage() {
   const params = useParams<{ tripId: string }>();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
 
   const tripId = params.tripId;
   const code = searchParams.get("code") ?? "";
 
   const { user, loading } = useAuth();
-  const isGuestView = !user;
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (loading || user) return;
+
+    const query = searchParams.toString();
+    const next = query ? `${pathname}?${query}` : pathname;
+    router.replace(`/login?next=${encodeURIComponent(next)}`);
+  }, [loading, user, pathname, router, searchParams]);
+
   // Validate invite code once, then subscribe
   useEffect(() => {
+    if (!user) return;
+
     let unsubTrip: (() => void) | null = null;
     let unsubRooms: (() => void) | null = null;
     let unsubMembers: (() => void) | null = null;
@@ -206,6 +217,7 @@ export default function ResultsPage() {
   }, [user, trip, rooms]);
 
   if (loading) return <main className="page">Loading…</main>;
+  if (!user) return <main className="page">Redirecting to sign in…</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
 
@@ -233,14 +245,10 @@ export default function ResultsPage() {
       </section>
 
       <section className="card">
-        {isGuestView && <div className="notice">Viewing as guest — continue as guest to bid</div>}
         <div className="section-title">My status</div>
-        {isGuestView ? (
-          <p className="muted">Continue as guest on the trip page to bid and appear in live results.</p>
-        ) : null}
         {trip.status === "draft" && <p className="muted">The auction hasn’t started yet.</p>}
 
-        {!isGuestView && trip.status === "live" && (
+        {trip.status === "live" && (
           <>
             {myProvisional ? (
               <p>
@@ -256,7 +264,7 @@ export default function ResultsPage() {
           </>
         )}
 
-        {!isGuestView && trip.status === "ended" && (
+        {trip.status === "ended" && (
           <>
             {myProvisional ? (
               <p>

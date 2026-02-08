@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
@@ -15,6 +15,7 @@ import { auth } from "@/src/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,17 @@ export default function LoginPage() {
   const [showResetForm, setShowResetForm] = useState(false);
   const [appleHint, setAppleHint] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const nextPath = useMemo(() => {
+    const raw = searchParams.get("next");
+    if (!raw) return "/";
+    if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+    return raw;
+  }, [searchParams]);
+
+  function goToNext() {
+    router.push(nextPath);
+  }
 
   function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof FirebaseError && error.message) {
@@ -50,7 +62,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await createUserWithEmailAndPassword(auth, email.trim(), password);
-      router.push("/");
+      goToNext();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Sign up failed"));
     } finally {
@@ -63,7 +75,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.push("/");
+      goToNext();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Sign in failed"));
     } finally {
@@ -78,7 +90,7 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-      router.push("/");
+      goToNext();
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Google sign in failed"));
     } finally {
@@ -93,7 +105,7 @@ export default function LoginPage() {
     try {
       const provider = new OAuthProvider("apple.com");
       await signInWithPopup(auth, provider);
-      router.push("/");
+      goToNext();
     } catch (e: unknown) {
       setAppleHint(true);
       setError(getErrorMessage(e, "Apple sign in failed"));
@@ -135,6 +147,11 @@ export default function LoginPage() {
         <p className="hero-subtitle">
           Access your trips, manage auctions, and share invite links with your group.
         </p>
+        {nextPath !== "/" ? (
+          <p className="notice" style={{ maxWidth: 520, margin: "16px auto 0" }}>
+            Sign in or create an account to continue.
+          </p>
+        ) : null}
       </section>
 
       <section className="card" style={{ maxWidth: 520, margin: "0 auto" }}>

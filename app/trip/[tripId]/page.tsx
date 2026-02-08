@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { signInAnonymously } from "firebase/auth";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   collection,
   doc,
@@ -18,12 +17,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
-import {
-  getPreferredDisplayName,
-  getStoredGuestDisplayName,
-  normalizeDisplayName,
-  setStoredGuestDisplayName,
-} from "@/src/lib/authGuests";
+import { getPreferredDisplayName } from "@/src/lib/authGuests";
 
 type Room = {
   id: string;
@@ -121,7 +115,6 @@ function debugBidLog(event: string, payload?: unknown) {
 function debugBidWriteIntent(payload: {
   projectId: string | null;
   uid: string;
-  isAnonymous: boolean | null;
   tripPath: string;
   roomPath: string;
   bidPayload: { amount: number; bidderUid: string; bidTimeMs: number; createdAt: Timestamp };
@@ -139,11 +132,12 @@ function debugBidWriteIntent(payload: {
 export default function TripPage() {
   const params = useParams<{ tripId: string }>();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const tripId = params.tripId;
   const inviteCode = useMemo(() => searchParams.get("code") ?? "", [searchParams]);
 
   const { user, loading } = useAuth();
-  const isGuestView = !user;
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -152,14 +146,19 @@ export default function TripPage() {
 
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
   const [busyAdmin, setBusyAdmin] = useState(false);
-  const [busyGuestAuth, setBusyGuestAuth] = useState(false);
-  const [guestActionError, setGuestActionError] = useState<string | null>(null);
-  const [bidAuthError, setBidAuthError] = useState<string | null>(null);
   const [bidActionError, setBidActionError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [copyError, setCopyError] = useState<string | null>(null);
 
   const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    if (loading || user) return;
+
+    const query = searchParams.toString();
+    const next = query ? `${pathname}?${query}` : pathname;
+    router.replace(`/login?next=${encodeURIComponent(next)}`);
+  }, [loading, user, pathname, router, searchParams]);
 
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 1000);
@@ -211,7 +210,6 @@ export default function TripPage() {
 
   function leadingBidderLabel(uid: string | null) {
     if (!uid) return null;
-    if (isGuestView) return "Participant";
     return memberNameByUid[uid] ?? "(signed-in user)";
   }
 
@@ -221,24 +219,10 @@ export default function TripPage() {
     return Math.max(0, trip.totalPrice - sumOther);
   }
 
-  function promptForGuestName() {
-    if (typeof window === "undefined") return null;
-
-    let initial = getStoredGuestDisplayName() ?? "";
-    while (true) {
-      const input = window.prompt("Enter a display name (2-24 characters).", initial);
-      if (input === null) return null;
-
-      const normalized = normalizeDisplayName(input);
-      if (normalized) return normalized;
-
-      window.alert("Display name must be between 2 and 24 characters.");
-      initial = input;
-    }
-  }
-
   // ✅ LIVE subscriptions
   useEffect(() => {
+    if (!user) return;
+
     let unsubTrip: (() => void) | null = null;
     let unsubRooms: (() => void) | null = null;
     let unsubMembers: (() => void) | null = null;
@@ -268,6 +252,18 @@ export default function TripPage() {
             displayName,
             role: user.uid === data.createdByUid ? "manager" : "participant",
             joinedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        await setDoc(
+          doc(db, "users", user.uid, "myTrips", tripId),
+          {
+            tripId,
+            inviteCode: typeof data.inviteCode === "string" ? data.inviteCode : "",
+            name: typeof data.name === "string" ? data.name : "Untitled trip",
+            status: data.status === "live" || data.status === "ended" ? data.status : "draft",
+            updatedAt: serverTimestamp(),
           },
           { merge: true }
         );
@@ -304,31 +300,27 @@ export default function TripPage() {
         (e) => setError(`Rooms subscription error: ${e.message}`)
       );
 
-      if (user) {
-        unsubMembers = onSnapshot(
-          collection(db, "trips", tripId, "members"),
-          (snap3) => {
-            const list = snap3.docs.map((d) => {
-              const m = d.data() as any;
-              return {
-                uid: d.id,
-                displayName: m.displayName ?? d.id,
-                role: (m.role ?? "participant") as any,
-              } as Member;
-            });
+      unsubMembers = onSnapshot(
+        collection(db, "trips", tripId, "members"),
+        (snap3) => {
+          const list = snap3.docs.map((d) => {
+            const m = d.data() as any;
+            return {
+              uid: d.id,
+              displayName: m.displayName ?? d.id,
+              role: (m.role ?? "participant") as any,
+            } as Member;
+          });
 
-            list.sort((a, b) => {
-              if (a.role !== b.role) return a.role === "manager" ? -1 : 1;
-              return a.displayName.localeCompare(b.displayName);
-            });
+          list.sort((a, b) => {
+            if (a.role !== b.role) return a.role === "manager" ? -1 : 1;
+            return a.displayName.localeCompare(b.displayName);
+          });
 
-            setMembers(list);
-          },
-          (e) => setError(`Members subscription error: ${e.message}`)
-        );
-      } else {
-        setMembers([]);
-      }
+          setMembers(list);
+        },
+        (e) => setError(`Members subscription error: ${e.message}`)
+      );
     }
 
     if (!loading) boot().catch((e: any) => setError(e?.message ?? "Failed to load"));
@@ -494,69 +486,6 @@ export default function TripPage() {
     }
   }
 
-  async function continueAsGuest() {
-    if (!trip || loading) return;
-
-    const displayName = promptForGuestName();
-    if (!displayName) return;
-
-    setGuestActionError(null);
-    setBusyGuestAuth(true);
-
-    try {
-      setStoredGuestDisplayName(displayName);
-      debugBidLog("continue_as_guest_start", {
-        tripId,
-        currentUserUid: user?.uid ?? null,
-        currentUserAnonymous: user?.isAnonymous ?? null,
-      });
-      const signedInUser = auth.currentUser ?? (await signInAnonymously(auth)).user;
-      await signedInUser.getIdToken(true);
-      const nextUser = auth.currentUser ?? signedInUser;
-      if (!nextUser?.uid) throw new Error("Sign in / Continue as guest to bid");
-      setBidAuthError(null);
-      setBidActionError(null);
-
-      const memberRef = doc(db, "trips", tripId, "members", nextUser.uid);
-
-      await setDoc(
-        memberRef,
-        {
-          displayName,
-          role: nextUser.uid === trip.createdByUid ? "manager" : "participant",
-          joinedAt: Timestamp.now(),
-        },
-        { merge: true }
-      );
-      debugBidLog("continue_as_guest_success", {
-        uid: nextUser.uid,
-        isAnonymous: nextUser.isAnonymous,
-        memberPath: memberRef.path,
-        displayName,
-      });
-    } catch (e: unknown) {
-      const parsed = extractFirestoreError(e);
-      const code = parsed.code;
-      const message = parsed.message;
-
-      if (code === "auth/operation-not-allowed") {
-        setGuestActionError("Anonymous sign-in is not enabled in Firebase Auth.");
-      } else if (code === "auth/network-request-failed") {
-        setGuestActionError("Network request failed. Check your connection and try again.");
-      } else {
-        setGuestActionError(message);
-      }
-      debugBidLog("continue_as_guest_failed", {
-        tripId,
-        code: parsed.code,
-        message: parsed.message,
-        details: parsed.details,
-      });
-    } finally {
-      setBusyGuestAuth(false);
-    }
-  }
-
   // ---------- Bidding ----------
   async function placeBid(room: Room) {
     if (!trip) return;
@@ -564,7 +493,6 @@ export default function TripPage() {
     const authUser = auth.currentUser;
     debugBidLog("bid_auth_check", {
       uid: authUser?.uid ?? null,
-      isAnonymous: authUser?.isAnonymous ?? null,
       hasCurrentUser: !!authUser,
     });
     const uid = authUser?.uid;
@@ -580,14 +508,12 @@ export default function TripPage() {
     const localAuctionLiveNow = trip.status === "live" && (localEndMs === null || nowMs <= localEndMs);
     debugBidLog("bid_preflight", {
       uid: uid ?? null,
-      isAnonymous: authUser?.isAnonymous ?? null,
       tripId,
       roomId: room.id,
       amount: optimisticAmount,
     });
     debugBidLog("bid_rule_snapshot_pre_tx", {
       authUid: uid ?? null,
-      authAnonymous: authUser?.isAnonymous ?? null,
       tripStatus: trip.status,
       tripAuctionEndAtRaw: localEndRaw,
       tripAuctionEndAtMs: localEndMs,
@@ -599,11 +525,9 @@ export default function TripPage() {
     });
 
     if (!uid) {
-      setBidAuthError("Sign in / Continue as guest to bid");
-      setBidActionError("Sign in / Continue as guest to bid");
+      setBidActionError("Sign in to bid.");
       return;
     }
-    setBidAuthError(null);
     setBidActionError(null);
 
     if (trip.status !== "live") return alert("Auction is not live yet.");
@@ -619,7 +543,6 @@ export default function TripPage() {
     debugBidWriteIntent({
       projectId,
       uid,
-      isAnonymous: authUser?.isAnonymous ?? null,
       tripPath: tripRefPath,
       roomPath: roomRefPath,
       bidPayload: {
@@ -708,7 +631,6 @@ export default function TripPage() {
         const memberSnap = await getDoc(memberRef);
         debugBidLog("bid_user_context", {
           uid,
-          isAnonymous: authUser?.isAnonymous ?? null,
           memberExists: memberSnap.exists(),
           memberPath: memberRef.path,
           tripPath: tripRefPath,
@@ -747,7 +669,6 @@ export default function TripPage() {
 
         debugBidLog("bid_rule_snapshot_tx", {
           authUid: uid,
-          authAnonymous: authUser?.isAnonymous ?? null,
           tripStatus: t.status ?? null,
           tripAuctionEndAtRaw: txEndRaw,
           tripAuctionEndAtMs: txEndMs,
@@ -886,6 +807,7 @@ export default function TripPage() {
   }
 
   if (loading) return <main className="page">Auth loading…</main>;
+  if (!user) return <main className="page">Redirecting to sign in…</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
 
@@ -895,7 +817,7 @@ export default function TripPage() {
         ? formatTime(remainingMs)
         : "00:00:00"
       : null;
-  const authReadyUser = auth.currentUser;
+  const authReadyUser = user;
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const listingStats = [
     formatListingCount(trip.listingBedrooms, "bedroom"),
@@ -940,35 +862,20 @@ export default function TripPage() {
         ) : null}
       </section>
 
-      {isGuestView && (
-        <section className="card soft section">
-          <div className="notice">Viewing as guest — continue as guest to bid</div>
-          {guestActionError ? <p className="muted" style={{ marginTop: 10 }}>{guestActionError}</p> : null}
-          {bidAuthError ? <p className="muted" style={{ marginTop: 10 }}>{bidAuthError}</p> : null}
-          {bidActionError ? <p className="muted" style={{ marginTop: 10 }}>{bidActionError}</p> : null}
-        </section>
-      )}
-
       <section className="card section">
         <div className="section-title">Lobby</div>
-        {isGuestView ? (
-          <p className="muted">Continue as guest to join and appear in the participant lobby.</p>
-        ) : (
-          <>
-            <div className="row">
-              <span className="pill">Participants: {members.length}</span>
-              {isManager ? <span className="pill">Manager view</span> : null}
-            </div>
-            <ul className="list" style={{ marginTop: 12 }}>
-              {members.map((m) => (
-                <li key={m.uid} className="list-item">
-                  <strong>{m.displayName}</strong>
-                  <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+        <div className="row">
+          <span className="pill">Participants: {members.length}</span>
+          {isManager ? <span className="pill">Manager view</span> : null}
+        </div>
+        <ul className="list" style={{ marginTop: 12 }}>
+          {members.map((m) => (
+            <li key={m.uid} className="list-item">
+              <strong>{m.displayName}</strong>
+              <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="card section">
@@ -1059,7 +966,6 @@ export default function TripPage() {
 
       <section className="card section">
         <div className="section-title">Rooms</div>
-        {bidAuthError ? <p className="muted" style={{ marginBottom: 10 }}>{bidAuthError}</p> : null}
         {bidActionError ? <p className="muted" style={{ marginBottom: 10 }}>{bidActionError}</p> : null}
         {rooms.length === 0 ? (
           <p className="muted">No rooms found.</p>
@@ -1089,25 +995,14 @@ export default function TripPage() {
                   <div className="muted">Max allowed right now: <strong>${maxAllowed}</strong></div>
 
                   {trip.status !== "ended" ? (
-                    authReadyUser ? (
-                      <button
-                        className="button"
-                        style={{ marginTop: 10 }}
-                        disabled={!canBid || busyRoomId === r.id}
-                        onClick={() => placeBid(r)}
-                      >
-                        {busyRoomId === r.id ? "Bidding…" : `Bid $${nextBid}`}
-                      </button>
-                    ) : (
-                      <button
-                        className="button ghost"
-                        style={{ marginTop: 10 }}
-                        onClick={continueAsGuest}
-                        disabled={busyGuestAuth}
-                      >
-                        {busyGuestAuth ? "Continuing..." : "Sign in / Continue as guest to bid"}
-                      </button>
-                    )
+                    <button
+                      className="button"
+                      style={{ marginTop: 10 }}
+                      disabled={!authReadyUser || !canBid || busyRoomId === r.id}
+                      onClick={() => placeBid(r)}
+                    >
+                      {busyRoomId === r.id ? "Bidding…" : `Bid $${nextBid}`}
+                    </button>
                   ) : (
                     <div style={{ marginTop: 10 }}>
                       Winner: <strong>{leadingBidderLabel(r.winnerUid ?? null) ?? "No winner"}</strong>

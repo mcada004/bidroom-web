@@ -3,7 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Shared auth helpers.
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null &&
+        request.auth.token.firebase.sign_in_provider != "anonymous";
     }
 
     function tripDoc(tripId) {
@@ -36,7 +37,7 @@ service cloud.firestore {
     }
 
     match /trips/{tripId} {
-      // Public read so guests can open invite links without auth.
+      // Public read so viewers can open invite links without auth.
       allow read: if true;
 
       // Trip creation must be authenticated and self-owned.
@@ -92,7 +93,7 @@ service cloud.firestore {
         );
 
         match /bids/{bidId} {
-          // Public read so guests can view live/final auction history if needed.
+          // Public read so viewers can see live/final auction history if needed.
           allow read: if true;
 
           // Only signed-in users can place their own bids.
@@ -114,7 +115,7 @@ service cloud.firestore {
       }
 
       match /members/{memberUid} {
-        // Public read lets guests see participant display names in live views/results.
+        // Public read lets viewers see participant display names in live views/results.
         allow read: if true;
 
         // Users can only create/update their own profile fields.
@@ -126,6 +127,10 @@ service cloud.firestore {
         // Manager or self can remove a membership record.
         allow delete: if isTripManager(tripId) || (isSignedIn() && request.auth.uid == memberUid);
       }
+    }
+
+    match /users/{userId}/myTrips/{tripId} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
   }
 }
