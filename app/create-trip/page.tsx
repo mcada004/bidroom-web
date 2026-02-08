@@ -48,8 +48,13 @@ export default function CreateTripPage() {
   const [error, setError] = useState<string | null>(null);
 
   function parseListingUrlOrNull(raw: string) {
-    const value = raw.trim();
-    if (!value) return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    const value =
+      trimmed.startsWith("http://") || trimmed.startsWith("https://")
+        ? trimmed
+        : `https://${trimmed}`;
 
     let parsed: URL;
     try {
@@ -62,7 +67,7 @@ export default function CreateTripPage() {
       throw new Error("Listing link must start with http:// or https://");
     }
 
-    return value;
+    return parsed.toString();
   }
 
   async function createTrip() {
@@ -75,7 +80,8 @@ export default function CreateTripPage() {
     const N = Number(roomCount);
     let listingUrlValue: string | null = null;
     try {
-      listingUrlValue = parseListingUrlOrNull(listingUrl);
+      const raw = (listingUrl ?? "").trim();
+      listingUrlValue = raw.length === 0 ? null : parseListingUrlOrNull(raw);
     } catch (err) {
       const parsed = extractFirestoreError(err);
       setBusy(false);
@@ -109,12 +115,11 @@ export default function CreateTripPage() {
 
     // STEP 1: create trip doc + manager membership + user index.
     try {
-      const tripRef = await addDoc(collection(db, "trips"), {
+      const payload = {
         name: normalizedTripName,
         createdByUid: uid,
         status: "draft",
         inviteCode,
-        listingUrl: listingUrlValue,
         listingTitle: null,
         listingImageUrl: null,
         listingBedrooms: null,
@@ -133,7 +138,15 @@ export default function CreateTripPage() {
         maxRoomsPerUser: 1,
 
         createdAt: serverTimestamp(),
-      });
+      } as Record<string, unknown>;
+
+      if (listingUrlValue) {
+        payload.listingUrl = listingUrlValue;
+      }
+
+      console.log("[createTrip] payload", payload);
+
+      const tripRef = await addDoc(collection(db, "trips"), payload);
 
       createdTripId = tripRef.id;
 
