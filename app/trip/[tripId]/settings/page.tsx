@@ -16,6 +16,7 @@ type Trip = {
   name: string;
   status: "draft" | "live" | "ended";
   inviteCode: string;
+  pricingMode?: "equalSplit" | "zero" | "preset" | "firstBid";
   createdByUid: string;
   listingUrl?: string | null;
   listingPreview?: ListingPreview | null;

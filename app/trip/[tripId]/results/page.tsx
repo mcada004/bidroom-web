@@ -29,6 +29,7 @@ type Trip = {
   status: "draft" | "live" | "ended";
   totalPrice: number;
   inviteCode: string;
+  pricingMode?: "equalSplit" | "zero" | "preset" | "firstBid";
   listingUrl?: string | null;
 };
 
