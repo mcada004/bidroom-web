@@ -19,7 +19,7 @@ type Trip = {
   pricingMode?: "equalSplit" | "zero" | "preset" | "firstBid";
   createdByUid: string;
   listingUrl?: string | null;
-  listingPreview?: ListingPreview | null;
+  listingPreview?: Record<string, unknown> | null;
   listingPreviewUpdatedAt?: unknown;
   listingPreviewError?: string | null;
   listingTitle?: string | null;
