@@ -948,6 +948,7 @@ export default function TripPage() {
         }, 0);
         const maxAllowed = Math.max(0, totalPrice - sumOther);
 
+        if (typedBid < current) throw new Error(`Bid cannot be below current high bid ($${current}).`);
         if (typedBid < minAllowed) throw new Error(`Bid must be at least $${minAllowed}.`);
         if (typedBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
         if (typedBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);

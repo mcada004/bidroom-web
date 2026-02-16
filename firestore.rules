@@ -148,19 +148,20 @@ service cloud.firestore {
           request.resource.data.currentHighBidAt >= request.time - duration.value(2, "m") &&
           request.resource.data.currentHighBidAt <= request.time + duration.value(2, "m") &&
           request.resource.data.currentHighBidAmount is number &&
+          request.resource.data.currentHighBidTimeMs is number &&
           (
             !(resource.data.currentHighBidAmount is number) ||
             request.resource.data.currentHighBidAmount > resource.data.currentHighBidAmount ||
+            (
+              request.resource.data.currentHighBidAmount == resource.data.currentHighBidAmount &&
+              resource.data.currentHighBidTimeMs is number &&
+              request.resource.data.currentHighBidTimeMs < resource.data.currentHighBidTimeMs
+            ) ||
             (
               resource.data.currentHighBidAmount == 0 &&
               request.resource.data.currentHighBidAmount == 0 &&
               !(resource.data.currentHighBidderUid is string)
             )
-          ) &&
-          request.resource.data.currentHighBidTimeMs is number &&
-          (
-            !(resource.data.currentHighBidTimeMs is number) ||
-            request.resource.data.currentHighBidTimeMs >= resource.data.currentHighBidTimeMs
           )
         );
 
