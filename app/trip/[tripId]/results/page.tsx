@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
@@ -36,8 +36,6 @@ type Trip = {
 export default function ResultsPage() {
   const params = useParams<{ tripId: string }>();
   const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
 
   const tripId = params.tripId;
   const code = searchParams.get("code") ?? "";
@@ -49,18 +47,8 @@ export default function ResultsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (loading || user) return;
-
-    const query = searchParams.toString();
-    const next = query ? `${pathname}?${query}` : pathname;
-    router.replace(`/login?next=${encodeURIComponent(next)}`);
-  }, [loading, user, pathname, router, searchParams]);
-
   // Validate invite code once, then subscribe
   useEffect(() => {
-    if (!user) return;
-
     let unsubTrip: (() => void) | null = null;
     let unsubRooms: (() => void) | null = null;
     let unsubMembers: (() => void) | null = null;
@@ -136,7 +124,7 @@ export default function ResultsPage() {
     if (!uid) return null;
     if (memberName[uid]) return memberName[uid];
     if (uid === user?.uid) return preferredDisplayName;
-    return "Unknown member";
+    return "Participant";
   }
 
   // Live leaders per room (during live auction)
@@ -220,7 +208,6 @@ export default function ResultsPage() {
   }, [user, trip, rooms]);
 
   if (loading) return <main className="page">Loading…</main>;
-  if (!user) return <main className="page">Redirecting to sign in…</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
 

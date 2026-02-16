@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { signInAnonymously } from "firebase/auth";
 import {
   arrayUnion,
   collection,
@@ -19,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
+import { normalizeDisplayName } from "@/src/lib/authGuests";
 
 type Room = {
   id: string;
@@ -113,6 +115,7 @@ declare global {
 }
 
 const DEBUG_BIDS = process.env.NEXT_PUBLIC_DEBUG_BIDS === "true";
+const GUEST_BIDDER_NAME_KEY = "bidroom_guest_bidder_name";
 
 function extractFirestoreError(err: unknown) {
   const asObj = (err ?? {}) as FirestoreLikeError;
@@ -164,6 +167,7 @@ export default function TripPage() {
   const [removingMemberUid, setRemovingMemberUid] = useState<string | null>(null);
   const [bidActionError, setBidActionError] = useState<string | null>(null);
   const [memberActionNotice, setMemberActionNotice] = useState<string | null>(null);
+  const [busyGuestJoin, setBusyGuestJoin] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [copyError, setCopyError] = useState<string | null>(null);
 
@@ -260,6 +264,87 @@ export default function TripPage() {
     return Math.max(0, trip.totalPrice - sumOther);
   }
 
+  function getStoredGuestBidderName() {
+    if (typeof window === "undefined") return null;
+    return normalizeDisplayName(window.localStorage.getItem(GUEST_BIDDER_NAME_KEY) ?? "");
+  }
+
+  function setStoredGuestBidderName(displayName: string) {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(GUEST_BIDDER_NAME_KEY, displayName);
+  }
+
+  async function upsertMemberProfile(memberUid: string, displayName: string, createdByUid: string) {
+    await setDoc(
+      doc(db, "trips", tripId, "members", memberUid),
+      {
+        displayName,
+        role: memberUid === createdByUid ? "manager" : "participant",
+        joinedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  async function ensureBidderSession() {
+    if (!trip) return null;
+
+    let currentUser = auth.currentUser;
+    if (currentUser && !currentUser.isAnonymous) {
+      return currentUser.uid;
+    }
+
+    const existingAnonName = currentUser ? normalizeDisplayName(memberNameByUid[currentUser.uid] ?? "") : null;
+    const seededName = existingAnonName ?? getStoredGuestBidderName();
+    let chosenName = seededName;
+
+    if (!currentUser || !chosenName) {
+      const promptedName = window.prompt("Enter your name to join bidding", seededName ?? "");
+      if (promptedName === null) return null;
+      const normalized = normalizeDisplayName(promptedName);
+      if (!normalized) {
+        alert("Name must be 2–24 characters.");
+        return null;
+      }
+      chosenName = normalized;
+    }
+
+    debugBidLog("guest_join_start", { tripId, name: chosenName });
+
+    try {
+      if (!currentUser) {
+        const credential = await signInAnonymously(auth);
+        currentUser = credential.user ?? auth.currentUser;
+      }
+
+      if (!currentUser) throw new Error("Could not create an anonymous session.");
+      await currentUser.getIdToken();
+
+      await upsertMemberProfile(currentUser.uid, chosenName, trip.createdByUid);
+      setStoredGuestBidderName(chosenName);
+      debugBidLog("guest_join_success", { uid: currentUser.uid });
+      return currentUser.uid;
+    } catch (err: unknown) {
+      const parsed = extractFirestoreError(err);
+      debugBidLog("guest_join_failed", { code: parsed.code, message: parsed.message });
+      const message = `Could not join bidding [${parsed.code}]: ${parsed.message}`;
+      setBidActionError(message);
+      alert(message);
+      return null;
+    }
+  }
+
+  async function continueToBid(roomId?: string) {
+    debugBidLog("bid_click", { roomId: roomId ?? "unknown" });
+    setBidActionError(null);
+    setBusyGuestJoin(true);
+    try {
+      await ensureBidderSession();
+    } finally {
+      setBusyGuestJoin(false);
+    }
+  }
+
   // ✅ LIVE subscriptions
   useEffect(() => {
     let unsubTrip: (() => void) | null = null;
@@ -288,33 +373,32 @@ export default function TripPage() {
           Array.isArray(data.bannedUids) &&
           data.bannedUids.some((bannedUid: unknown) => bannedUid === user.uid);
         if (!bannedAtLoad) {
-          const displayName = user.isAnonymous ? "Participant" : preferredDisplayName;
-          try {
-            await setDoc(
-              doc(db, "trips", tripId, "members", user.uid),
-              {
-                displayName,
-                role: user.uid === data.createdByUid ? "manager" : "participant",
-                joinedAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
-          } catch (joinError) {
-            console.warn("[trip] member upsert skipped", joinError);
+          const storedAnonName = user.isAnonymous ? getStoredGuestBidderName() : null;
+          const memberDisplayName = user.isAnonymous
+            ? storedAnonName
+            : normalizeDisplayName(preferredDisplayName) ?? "Participant";
+          if (memberDisplayName) {
+            try {
+              await upsertMemberProfile(user.uid, memberDisplayName, data.createdByUid);
+            } catch (joinError) {
+              console.warn("[trip] member upsert skipped", joinError);
+            }
           }
         }
 
-        await setDoc(
-          doc(db, "users", user.uid, "myTrips", tripId),
-          {
-            tripId,
-            inviteCode: typeof data.inviteCode === "string" ? data.inviteCode : "",
-            name: typeof data.name === "string" ? data.name : "Untitled trip",
-            status: data.status === "live" || data.status === "ended" ? data.status : "draft",
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        if (!user.isAnonymous) {
+          await setDoc(
+            doc(db, "users", user.uid, "myTrips", tripId),
+            {
+              tripId,
+              inviteCode: typeof data.inviteCode === "string" ? data.inviteCode : "",
+              name: typeof data.name === "string" ? data.name : "Untitled trip",
+              status: data.status === "live" || data.status === "ended" ? data.status : "draft",
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
       }
 
       unsubTrip = onSnapshot(
@@ -562,6 +646,7 @@ export default function TripPage() {
   // ---------- Bidding ----------
   async function placeBid(room: Room) {
     if (!trip) return;
+    debugBidLog("bid_click", { roomId: room.id });
     if (isBannedUser) {
       setBidActionError("You've been removed from bidding by the manager.");
       return;
@@ -579,13 +664,14 @@ export default function TripPage() {
     }
     const typedBid = parsedTypedBid;
 
+    const uid = await ensureBidderSession();
+    if (!uid) return;
     const authUser = auth.currentUser;
     debugBidLog("bid_auth_check", {
-      uid: authUser?.uid ?? null,
+      uid,
       isAnonymous: authUser?.isAnonymous ?? false,
       hasCurrentUser: !!authUser,
     });
-    const uid = authUser?.uid;
     const optimisticCurrent = Number(room.currentHighBidAmount ?? 0);
     const optimisticMinIncrement = minIncrementFor(optimisticCurrent);
     const optimisticMinAllowed = minAllowedForRoom(room);
@@ -599,7 +685,7 @@ export default function TripPage() {
           : null;
     const localAuctionLiveNow = trip.status === "live" && (localEndMs === null || nowMs <= localEndMs);
     debugBidLog("bid_preflight", {
-      uid: uid ?? null,
+      uid,
       isAnonymous: authUser?.isAnonymous ?? false,
       tripId,
       roomId: room.id,
@@ -609,7 +695,7 @@ export default function TripPage() {
       maxAllowed: optimisticMaxAllowed,
     });
     debugBidLog("bid_rule_snapshot_pre_tx", {
-      authUid: uid ?? null,
+      authUid: uid,
       tripStatus: trip.status,
       tripAuctionEndAtRaw: localEndRaw,
       tripAuctionEndAtMs: localEndMs,
@@ -621,11 +707,6 @@ export default function TripPage() {
       typedBid,
       bidGtCurrent: typedBid > optimisticCurrent,
     });
-
-    if (!uid) {
-      setBidActionError("Please sign in to bid");
-      return;
-    }
     setBidActionError(null);
 
     if (trip.status !== "live") return alert("Auction is not live yet.");
@@ -664,7 +745,7 @@ export default function TripPage() {
         currentHighBidTimeMs: bidTimeMsPreview,
       },
     });
-    debugBidLog("bid_write_paths", { tripPath: tripRefPath, roomPath: roomRefPath });
+    debugBidLog("bid_tx_paths", { tripPath: tripRefPath, roomPath: roomRefPath, bidPath: null });
     let bidRefPath: string | null = null;
     let txStage = "start";
     let attemptedAntiSnipeUpdate = false;
@@ -746,9 +827,6 @@ export default function TripPage() {
         if (typedBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
 
         const bidTimeMs = Date.now();
-        const createdAtTs = Timestamp.now();
-        const currentHighBidAtTs = Timestamp.now();
-
         // tie-break earliest wins
         const existingAmt = Number(r.currentHighBidAmount ?? 0);
         const existingTime = typeof r.currentHighBidTimeMs === "number" ? r.currentHighBidTimeMs : null;
@@ -767,13 +845,18 @@ export default function TripPage() {
           roomPath: roomRef.path,
           bidPath: bidRefPath,
         });
+        debugBidLog("bid_tx_paths", {
+          tripPath: tripRef.path,
+          roomPath: roomRef.path,
+          bidPath: bidRefPath,
+        });
         debugBidLog("bid_payload_core", {
           amount: typedBid,
           bidderUid: uid,
           bidTimeMs,
         });
 
-        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
+        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
         debugBidLog("bid_create_payload", bidCreatePayload);
         txStage = "write_bid_doc";
         tx.set(bidRef, bidCreatePayload);
@@ -781,7 +864,7 @@ export default function TripPage() {
         const roomUpdatePayload = {
           currentHighBidAmount: typedBid,
           currentHighBidderUid: uid,
-          currentHighBidAt: currentHighBidAtTs,
+          currentHighBidAt: serverTimestamp(),
           currentHighBidTimeMs: bidTimeMs,
         };
         debugBidLog("tx_room_path", { roomPath: roomRef.path });
@@ -1086,7 +1169,7 @@ export default function TripPage() {
         ) : null}
         {!authReadyUser ? (
           <p className="muted" style={{ marginBottom: 10 }}>
-            Please sign in to bid
+            Enter a display name to join bidding.
           </p>
         ) : null}
         {rooms.length === 0 ? (
@@ -1150,25 +1233,28 @@ export default function TripPage() {
                                 const nextValue = e.target.value;
                                 setBidInputs((prev) => ({ ...prev, [r.id]: nextValue }));
                               }}
-                              disabled={!authReadyUser || trip.status !== "live" || (endAtMs ? nowMs >= endAtMs : false) || busyRoomId === r.id}
+                              disabled={!authReadyUser || trip.status !== "live" || (endAtMs ? nowMs >= endAtMs : false) || busyRoomId === r.id || busyGuestJoin}
                             />
                           </label>
-                          <button
-                            className="button"
-                            disabled={!authReadyUser || !canBid || busyRoomId === r.id}
-                            onClick={() => {
-                              const clickedRaw = bidInputs[r.id] ?? String(minNextBid);
-                              const clickedBid = Number(clickedRaw);
-                              debugBidLog("click_room", {
-                                roomId: r.id,
-                                name: r.name,
-                                computedNextBid: Number.isFinite(clickedBid) ? clickedBid : null,
-                              });
-                              placeBid(r);
-                            }}
-                          >
-                            {busyRoomId === r.id ? "Bidding…" : "Place bid"}
-                          </button>
+                          {authReadyUser ? (
+                            <button
+                              className="button"
+                              disabled={!canBid || busyRoomId === r.id || busyGuestJoin}
+                              onClick={() => {
+                                placeBid(r);
+                              }}
+                            >
+                              {busyRoomId === r.id ? "Bidding…" : "Place bid"}
+                            </button>
+                          ) : (
+                            <button
+                              className="button secondary"
+                              disabled={busyGuestJoin || busyRoomId === r.id}
+                              onClick={() => continueToBid(r.id)}
+                            >
+                              {busyGuestJoin ? "Joining…" : "Continue to bid"}
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="muted">Bidding disabled for removed participants.</div>
