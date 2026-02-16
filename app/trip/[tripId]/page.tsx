@@ -560,13 +560,14 @@ export default function TripPage() {
   }
 
   // ---------- Bidding ----------
-  async function placeBid(room: Room, typedBidInput: string) {
+  async function placeBid(room: Room) {
     if (!trip) return;
     if (isBannedUser) {
       setBidActionError("You've been removed from bidding by the manager.");
       return;
     }
 
+    const typedBidInput = bidInputs[room.id] ?? String(minAllowedForRoom(room));
     const parsedTypedBid = Number(typedBidInput);
     if (!Number.isFinite(parsedTypedBid) || !Number.isInteger(parsedTypedBid)) {
       setBidActionError("Bid amount must be a whole-dollar number.");
@@ -603,6 +604,9 @@ export default function TripPage() {
       tripId,
       roomId: room.id,
       amount: typedBid,
+      computedNextBid: typedBid,
+      minAllowed: optimisticMinAllowed,
+      maxAllowed: optimisticMaxAllowed,
     });
     debugBidLog("bid_rule_snapshot_pre_tx", {
       authUid: uid ?? null,
@@ -628,10 +632,6 @@ export default function TripPage() {
     if (endAtMs && nowMs >= endAtMs) return alert("Auction has ended.");
     if (typedBid < optimisticMinAllowed) {
       setBidActionError(`Bid must be at least $${optimisticMinAllowed}.`);
-      return;
-    }
-    if (typedBid > optimisticMaxAllowed) {
-      setBidActionError(`Bid too high. Max allowed for this room is $${optimisticMaxAllowed}.`);
       return;
     }
     if (typedBid > trip.totalPrice) {
@@ -691,9 +691,13 @@ export default function TripPage() {
         txStage = "read_trip_room";
         const tripRef = doc(db, "trips", tripId);
         const roomRef = doc(db, "trips", tripId, "rooms", room.id);
+        const otherRoomRefs = rooms
+          .filter((rr) => rr.id !== room.id)
+          .map((rr) => doc(db, "trips", tripId, "rooms", rr.id));
 
         const tripSnap = await tx.get(tripRef);
         const roomSnap = await tx.get(roomRef);
+        const otherRoomSnaps = await Promise.all(otherRoomRefs.map((ref) => tx.get(ref)));
         if (!tripSnap.exists() || !roomSnap.exists()) throw new Error("Missing trip/room");
 
         const t = tripSnap.data() as any;
@@ -730,7 +734,11 @@ export default function TripPage() {
           bidGtCurrent: typedBid > current,
         });
 
-        const sumOther = rooms.reduce((sum, rr) => (rr.id === room.id ? sum : sum + (rr.currentHighBidAmount || 0)), 0);
+        const sumOther = otherRoomSnaps.reduce((sum, roomSnapDoc) => {
+          if (!roomSnapDoc.exists()) return sum;
+          const roomData = roomSnapDoc.data() as any;
+          return sum + Number(roomData.currentHighBidAmount ?? 0);
+        }, 0);
         const maxAllowed = Math.max(0, totalPrice - sumOther);
 
         if (typedBid < minAllowed) throw new Error(`Bid must be at least $${minAllowed}.`);
@@ -776,6 +784,7 @@ export default function TripPage() {
           currentHighBidAt: currentHighBidAtTs,
           currentHighBidTimeMs: bidTimeMs,
         };
+        debugBidLog("tx_room_path", { roomPath: roomRef.path });
         debugBidLog("room_update_payload", roomUpdatePayload);
         txStage = "write_room_high_bid";
         tx.update(roomRef, roomUpdatePayload);
@@ -1098,9 +1107,7 @@ export default function TripPage() {
                 !!authReadyUser &&
                 !isBannedUser &&
                 trip.status === "live" &&
-                (endAtMs ? nowMs < endAtMs : true) &&
-                minNextBid <= maxAllowed &&
-                minNextBid <= trip.totalPrice;
+                (endAtMs ? nowMs < endAtMs : true);
 
               return (
                 <li key={r.id} className="list-item">
@@ -1149,7 +1156,16 @@ export default function TripPage() {
                           <button
                             className="button"
                             disabled={!authReadyUser || !canBid || busyRoomId === r.id}
-                            onClick={() => placeBid(r, bidValue)}
+                            onClick={() => {
+                              const clickedRaw = bidInputs[r.id] ?? String(minNextBid);
+                              const clickedBid = Number(clickedRaw);
+                              debugBidLog("click_room", {
+                                roomId: r.id,
+                                name: r.name,
+                                computedNextBid: Number.isFinite(clickedBid) ? clickedBid : null,
+                              });
+                              placeBid(r);
+                            }}
                           >
                             {busyRoomId === r.id ? "Bidding…" : "Place bid"}
                           </button>
