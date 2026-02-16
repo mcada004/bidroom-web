@@ -174,6 +174,7 @@ export default function CreateTripPage() {
       antiSnipeWindowMinutes: 10,
       antiSnipeExtendMinutes: 10,
       maxRoomsPerUser: 1,
+      bannedUids: [],
 
       createdAt: serverTimestamp(),
     } as Record<string, unknown>;

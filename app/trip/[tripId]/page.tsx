@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
+  arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -64,6 +66,7 @@ type Trip = {
 
   antiSnipeWindowMinutes: number;
   antiSnipeExtendMinutes: number;
+  bannedUids?: string[];
 
   auctionStartAt?: any;
   auctionEndAt?: any;
@@ -158,7 +161,9 @@ export default function TripPage() {
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
   const [bidInputs, setBidInputs] = useState<Record<string, string>>({});
   const [busyAdmin, setBusyAdmin] = useState(false);
+  const [removingMemberUid, setRemovingMemberUid] = useState<string | null>(null);
   const [bidActionError, setBidActionError] = useState<string | null>(null);
+  const [memberActionNotice, setMemberActionNotice] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [copyError, setCopyError] = useState<string | null>(null);
 
@@ -215,6 +220,10 @@ export default function TripPage() {
   }, [rooms]);
 
   const isManager = useMemo(() => !!(user && trip && user.uid === trip.createdByUid), [user, trip]);
+  const isBannedUser = useMemo(() => {
+    if (!user || !trip || !Array.isArray(trip.bannedUids)) return false;
+    return trip.bannedUids.includes(user.uid);
+  }, [user, trip]);
 
   const memberNameByUid = useMemo(() => {
     const map: Record<string, string> = {};
@@ -275,16 +284,25 @@ export default function TripPage() {
 
       // join
       if (user) {
-        const displayName = user.isAnonymous ? "Participant" : preferredDisplayName;
-        await setDoc(
-          doc(db, "trips", tripId, "members", user.uid),
-          {
-            displayName,
-            role: user.uid === data.createdByUid ? "manager" : "participant",
-            joinedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        const bannedAtLoad =
+          Array.isArray(data.bannedUids) &&
+          data.bannedUids.some((bannedUid: unknown) => bannedUid === user.uid);
+        if (!bannedAtLoad) {
+          const displayName = user.isAnonymous ? "Participant" : preferredDisplayName;
+          try {
+            await setDoc(
+              doc(db, "trips", tripId, "members", user.uid),
+              {
+                displayName,
+                role: user.uid === data.createdByUid ? "manager" : "participant",
+                joinedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          } catch (joinError) {
+            console.warn("[trip] member upsert skipped", joinError);
+          }
+        }
 
         await setDoc(
           doc(db, "users", user.uid, "myTrips", tripId),
@@ -303,7 +321,10 @@ export default function TripPage() {
         tripRef,
         (s) => {
           const t = s.data() as any;
-          setTrip({ ...t, status: (t.status ?? "draft") as any });
+          const bannedUids = Array.isArray(t.bannedUids)
+            ? t.bannedUids.filter((uid: unknown) => typeof uid === "string")
+            : [];
+          setTrip({ ...t, status: (t.status ?? "draft") as any, bannedUids });
         },
         (e) => setError(`Trip subscription error: ${e.message}`)
       );
@@ -516,9 +537,35 @@ export default function TripPage() {
     }
   }
 
+  async function removeParticipant(member: Member) {
+    if (!trip || !isManager || !user) return;
+    if (member.uid === user.uid || member.role === "manager") return;
+
+    const ok = window.confirm(`Remove ${member.displayName} from bidding?`);
+    if (!ok) return;
+
+    setRemovingMemberUid(member.uid);
+    setMemberActionNotice(null);
+    try {
+      await updateDoc(doc(db, "trips", tripId), {
+        bannedUids: arrayUnion(member.uid),
+      });
+      await deleteDoc(doc(db, "trips", tripId, "members", member.uid));
+      setMemberActionNotice(`${member.displayName} was removed from bidding.`);
+    } catch (e: any) {
+      setMemberActionNotice(e?.message ?? "Could not remove participant.");
+    } finally {
+      setRemovingMemberUid(null);
+    }
+  }
+
   // ---------- Bidding ----------
   async function placeBid(room: Room, typedBidInput: string) {
     if (!trip) return;
+    if (isBannedUser) {
+      setBidActionError("You've been removed from bidding by the manager.");
+      return;
+    }
 
     const parsedTypedBid = Number(typedBidInput);
     if (!Number.isFinite(parsedTypedBid) || !Number.isInteger(parsedTypedBid)) {
@@ -862,6 +909,12 @@ export default function TripPage() {
         </div>
       </section>
 
+      {isBannedUser ? (
+        <section className="card section">
+          <p className="notice">You've been removed from bidding by the manager.</p>
+        </section>
+      ) : null}
+
       <section className="card">
         <div className="section-title">Share link</div>
         <div className="code-block">{shareUrl}</div>
@@ -890,11 +943,29 @@ export default function TripPage() {
           <span className="pill">Participants: {members.length}</span>
           {isManager ? <span className="pill">Manager view</span> : null}
         </div>
+        {memberActionNotice ? (
+          <p className="notice" style={{ marginTop: 12 }}>
+            {memberActionNotice}
+          </p>
+        ) : null}
         <ul className="list" style={{ marginTop: 12 }}>
           {members.map((m) => (
             <li key={m.uid} className="list-item">
-              <strong>{authReadyUser ? m.displayName : "Participant"}</strong>
-              <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <div>
+                  <strong>{authReadyUser ? m.displayName : "Participant"}</strong>
+                  <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
+                </div>
+                {isManager && m.role !== "manager" && m.uid !== user?.uid ? (
+                  <button
+                    className="button secondary"
+                    onClick={() => removeParticipant(m)}
+                    disabled={removingMemberUid === m.uid}
+                  >
+                    {removingMemberUid === m.uid ? "Removing…" : "Remove"}
+                  </button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -999,6 +1070,11 @@ export default function TripPage() {
       <section className="card section">
         <div className="section-title">Rooms</div>
         {bidActionError ? <p className="muted" style={{ marginBottom: 10 }}>{bidActionError}</p> : null}
+        {isBannedUser ? (
+          <p className="notice" style={{ marginBottom: 10 }}>
+            You've been removed from bidding by the manager.
+          </p>
+        ) : null}
         {!authReadyUser ? (
           <p className="muted" style={{ marginBottom: 10 }}>
             Please sign in to bid
@@ -1020,6 +1096,7 @@ export default function TripPage() {
 
               const canBid =
                 !!authReadyUser &&
+                !isBannedUser &&
                 trip.status === "live" &&
                 (endAtMs ? nowMs < endAtMs : true) &&
                 minNextBid <= maxAllowed &&
@@ -1051,29 +1128,35 @@ export default function TripPage() {
 
                   {trip.status !== "ended" ? (
                     <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                      <label className="label" style={{ margin: 0 }}>
-                        Bid amount ($)
-                        <input
-                          className="input"
-                          type="number"
-                          min={minNextBid}
-                          max={bidInputMax}
-                          step={1}
-                          value={bidValue}
-                          onChange={(e) => {
-                            const nextValue = e.target.value;
-                            setBidInputs((prev) => ({ ...prev, [r.id]: nextValue }));
-                          }}
-                          disabled={!authReadyUser || trip.status !== "live" || (endAtMs ? nowMs >= endAtMs : false) || busyRoomId === r.id}
-                        />
-                      </label>
-                      <button
-                        className="button"
-                        disabled={!authReadyUser || !canBid || busyRoomId === r.id}
-                        onClick={() => placeBid(r, bidValue)}
-                      >
-                        {busyRoomId === r.id ? "Bidding…" : "Place bid"}
-                      </button>
+                      {!isBannedUser ? (
+                        <>
+                          <label className="label" style={{ margin: 0 }}>
+                            Bid amount ($)
+                            <input
+                              className="input"
+                              type="number"
+                              min={minNextBid}
+                              max={bidInputMax}
+                              step={1}
+                              value={bidValue}
+                              onChange={(e) => {
+                                const nextValue = e.target.value;
+                                setBidInputs((prev) => ({ ...prev, [r.id]: nextValue }));
+                              }}
+                              disabled={!authReadyUser || trip.status !== "live" || (endAtMs ? nowMs >= endAtMs : false) || busyRoomId === r.id}
+                            />
+                          </label>
+                          <button
+                            className="button"
+                            disabled={!authReadyUser || !canBid || busyRoomId === r.id}
+                            onClick={() => placeBid(r, bidValue)}
+                          >
+                            {busyRoomId === r.id ? "Bidding…" : "Place bid"}
+                          </button>
+                        </>
+                      ) : (
+                        <div className="muted">Bidding disabled for removed participants.</div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ marginTop: 10 }}>

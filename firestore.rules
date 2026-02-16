@@ -15,6 +15,12 @@ service cloud.firestore {
       return isSignedIn() && tripDoc(tripId).data.createdByUid == request.auth.uid;
     }
 
+    function isBanned(tripId) {
+      return request.auth != null &&
+        tripDoc(tripId).data.bannedUids is list &&
+        tripDoc(tripId).data.bannedUids.hasAny([request.auth.uid]);
+    }
+
     function isValidMemberPayload(tripId, memberUid) {
       return request.resource.data.keys().hasOnly(["displayName", "role", "joinedAt"]) &&
         request.resource.data.displayName is string &&
@@ -51,6 +57,7 @@ service cloud.firestore {
           "bidIncrement",
           "antiSnipeWindowMinutes",
           "antiSnipeExtendMinutes",
+          "bannedUids",
           "status",
           "auctionStartAt",
           "auctionEndAt",
@@ -63,6 +70,7 @@ service cloud.firestore {
         (!after.keys().hasAny(["bidIncrement"]) || (after.bidIncrement is number && after.bidIncrement >= 1)) &&
         (!after.keys().hasAny(["antiSnipeWindowMinutes"]) || (after.antiSnipeWindowMinutes is number && after.antiSnipeWindowMinutes >= 0)) &&
         (!after.keys().hasAny(["antiSnipeExtendMinutes"]) || (after.antiSnipeExtendMinutes is number && after.antiSnipeExtendMinutes >= 0)) &&
+        (!after.keys().hasAny(["bannedUids"]) || (after.bannedUids is list)) &&
         (!after.keys().hasAny(["status"]) || (after.status == "draft" || after.status == "live" || after.status == "ended"));
     }
 
@@ -103,6 +111,7 @@ service cloud.firestore {
       // Also allow signed-in bidders to extend only auctionEndAt (anti-sniping).
       allow update: if (isTripManager(tripId) && hasAllowedManagerTripUpdate(resource.data, request.resource.data)) || (
         isSignedIn() &&
+        !isBanned(tripId) &&
         resource.data.status == "live" &&
         resource.data.auctionEndAt is timestamp &&
         request.resource.data.diff(resource.data).changedKeys().hasOnly(["auctionEndAt"]) &&
@@ -125,6 +134,7 @@ service cloud.firestore {
         // Signed-in bidders can only update current-high-bid tracking fields.
         allow update: if isTripManager(tripId) || (
           isSignedIn() &&
+          !isBanned(tripId) &&
           request.resource.data.diff(resource.data).changedKeys().hasOnly([
             "currentHighBidAmount",
             "currentHighBidderUid",
@@ -157,6 +167,7 @@ service cloud.firestore {
 
           // Only signed-in users can place their own bids.
           allow create: if isSignedIn() &&
+            !isBanned(tripId) &&
             tripDoc(tripId).data.status == "live" &&
             (
               !(tripDoc(tripId).data.auctionEndAt is timestamp) ||
@@ -180,11 +191,12 @@ service cloud.firestore {
         // Users can only create/update their own profile fields.
         // Role escalation is blocked: only the trip creator can use "manager".
         allow create, update: if isSignedIn() &&
+          !isBanned(tripId) &&
           request.auth.uid == memberUid &&
           isValidMemberPayload(tripId, memberUid);
 
         // Manager or self can remove a membership record.
-        allow delete: if isTripManager(tripId) || (isSignedIn() && request.auth.uid == memberUid);
+        allow delete: if isTripManager(tripId) || (isSignedIn() && !isBanned(tripId) && request.auth.uid == memberUid);
       }
     }
 
