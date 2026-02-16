@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { signInAnonymously } from "firebase/auth";
+import { onAuthStateChanged, signInAnonymously, User } from "firebase/auth";
 import {
   arrayUnion,
   collection,
@@ -170,6 +170,7 @@ export default function TripPage() {
   const [busyGuestJoin, setBusyGuestJoin] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [copyError, setCopyError] = useState<string | null>(null);
+  const [bidAuthUser, setBidAuthUser] = useState<User | null>(() => auth.currentUser);
 
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -190,6 +191,25 @@ export default function TripPage() {
     return () => {
       delete window.__bidroomAuth;
     };
+  }, []);
+
+  useEffect(() => {
+    const initialUser = auth.currentUser;
+    setBidAuthUser(initialUser);
+    debugBidLog("bid_auth_state", {
+      hasAuthUser: !!initialUser,
+      uid: initialUser?.uid ?? null,
+      isAnonymous: initialUser?.isAnonymous ?? false,
+    });
+    const unsub = onAuthStateChanged(auth, (nextUser) => {
+      setBidAuthUser(nextUser);
+      debugBidLog("bid_auth_state", {
+        hasAuthUser: !!nextUser,
+        uid: nextUser?.uid ?? null,
+        isAnonymous: nextUser?.isAnonymous ?? false,
+      });
+    });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -225,9 +245,9 @@ export default function TripPage() {
 
   const isManager = useMemo(() => !!(user && trip && user.uid === trip.createdByUid), [user, trip]);
   const isBannedUser = useMemo(() => {
-    if (!user || !trip || !Array.isArray(trip.bannedUids)) return false;
-    return trip.bannedUids.includes(user.uid);
-  }, [user, trip]);
+    if (!bidAuthUser || !trip || !Array.isArray(trip.bannedUids)) return false;
+    return trip.bannedUids.includes(bidAuthUser.uid);
+  }, [bidAuthUser, trip]);
 
   const memberNameByUid = useMemo(() => {
     const map: Record<string, string> = {};
@@ -252,9 +272,9 @@ export default function TripPage() {
 
   function leadingBidderLabel(uid: string | null) {
     if (!uid) return null;
-    if (!user) return "Participant";
+    if (!bidAuthUser) return "Participant";
     if (memberNameByUid[uid]) return memberNameByUid[uid];
-    if (user?.uid === uid) return preferredDisplayName;
+    if (bidAuthUser.uid === uid) return preferredDisplayName;
     return "Participant";
   }
 
@@ -322,7 +342,8 @@ export default function TripPage() {
 
       await upsertMemberProfile(currentUser.uid, chosenName, trip.createdByUid);
       setStoredGuestBidderName(chosenName);
-      debugBidLog("guest_join_success", { uid: currentUser.uid });
+      setBidAuthUser(currentUser);
+      debugBidLog("guest_join_success", { uid: currentUser.uid, displayName: chosenName });
       return currentUser.uid;
     } catch (err: unknown) {
       const parsed = extractFirestoreError(err);
@@ -964,7 +985,7 @@ export default function TripPage() {
         ? formatTime(remainingMs)
         : "00:00:00"
       : null;
-  const authReadyUser = user;
+  const authReadyUser = bidAuthUser;
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const listingStats = [
     formatListingCount(trip.listingBedrooms, "bedroom"),
@@ -1172,6 +1193,13 @@ export default function TripPage() {
             Enter a display name to join bidding.
           </p>
         ) : null}
+        {!authReadyUser && !isBannedUser ? (
+          <div className="row" style={{ marginBottom: 10 }}>
+            <button className="button" disabled={busyGuestJoin} onClick={() => continueToBid()}>
+              {busyGuestJoin ? "Joining…" : "Continue to bid"}
+            </button>
+          </div>
+        ) : null}
         {rooms.length === 0 ? (
           <p className="muted">No rooms found.</p>
         ) : (
@@ -1182,6 +1210,12 @@ export default function TripPage() {
               const minNextBid = minAllowedForRoom(r);
               const minIncrement = minIncrementFor(current);
               const bidValue = bidInputs[r.id] ?? String(minNextBid);
+              const bidValueNumber = Number(bidValue);
+              const hasValidBidValue =
+                Number.isFinite(bidValueNumber) &&
+                Number.isInteger(bidValueNumber) &&
+                bidValueNumber >= minNextBid &&
+                bidValueNumber <= Math.min(maxAllowed, trip.totalPrice);
               const bidInputMax = Math.min(maxAllowed, trip.totalPrice);
 
               const highBidderName = leadingBidderLabel(r.currentHighBidderUid);
@@ -1190,7 +1224,8 @@ export default function TripPage() {
                 !!authReadyUser &&
                 !isBannedUser &&
                 trip.status === "live" &&
-                (endAtMs ? nowMs < endAtMs : true);
+                (endAtMs ? nowMs < endAtMs : true) &&
+                hasValidBidValue;
 
               return (
                 <li key={r.id} className="list-item">
@@ -1247,13 +1282,7 @@ export default function TripPage() {
                               {busyRoomId === r.id ? "Bidding…" : "Place bid"}
                             </button>
                           ) : (
-                            <button
-                              className="button secondary"
-                              disabled={busyGuestJoin || busyRoomId === r.id}
-                              onClick={() => continueToBid(r.id)}
-                            >
-                              {busyGuestJoin ? "Joining…" : "Continue to bid"}
-                            </button>
+                            <div className="muted">Click “Continue to bid” above to join bidding.</div>
                           )}
                         </>
                       ) : (
