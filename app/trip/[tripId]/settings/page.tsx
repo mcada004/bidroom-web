@@ -287,6 +287,18 @@ export default function TripSettingsPage() {
       setListingDescription(nextDescription);
       setListingSiteName(resolvedSite);
 
+      await updateDoc(doc(db, "trips", tripId), {
+        listingUrl: listingUrlValue,
+        listingTitle: nextTitle || null,
+        listingImageUrl: nextImageUrl || null,
+        listingDescription: nextDescription || null,
+        listingSiteName: resolvedSite || null,
+        listingBedrooms: pulled.listingBedrooms,
+        listingBeds: pulled.listingBeds,
+        listingBaths: pulled.listingBaths,
+        updatedAt: serverTimestamp(),
+      });
+
       if (
         !nextTitle &&
         !nextImageUrl &&

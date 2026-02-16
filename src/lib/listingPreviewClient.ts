@@ -17,6 +17,12 @@ type ListingPreviewApiPayload = {
   };
 };
 
+type LinkPreviewApiPayload = {
+  error?: unknown;
+  title?: unknown;
+  image?: unknown;
+};
+
 function toOptionalString(value: unknown) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -26,6 +32,34 @@ function toOptionalString(value: unknown) {
 function toOptionalNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   return null;
+}
+
+function asErrorMessage(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function pullOgLinkPreview(input: { idToken: string; listingUrl: string }): Promise<ListingPullResult> {
+  const response = await fetch("/api/link-preview", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.idToken}`,
+    },
+    body: JSON.stringify({ url: input.listingUrl }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as LinkPreviewApiPayload;
+  if (!response.ok) {
+    throw new Error(asErrorMessage(payload.error) ?? "Could not pull listing preview.");
+  }
+
+  return {
+    listingTitle: toOptionalString(payload.title),
+    listingImageUrl: toOptionalString(payload.image),
+    listingBedrooms: null,
+    listingBeds: null,
+    listingBaths: null,
+  };
 }
 
 export async function pullListingPreview(input: {
@@ -47,10 +81,13 @@ export async function pullListingPreview(input: {
 
   const payload = (await response.json().catch(() => ({}))) as ListingPreviewApiPayload;
   if (!response.ok) {
-    const errorMessage =
-      typeof payload.error === "string" && payload.error.trim()
-        ? payload.error.trim()
-        : "Could not pull listing preview.";
+    const errorMessage = asErrorMessage(payload.error) ?? "Could not pull listing preview.";
+    if (errorMessage.includes("Missing SEARCHAPI_API_KEY")) {
+      return pullOgLinkPreview({
+        idToken: input.idToken,
+        listingUrl: input.listingUrl,
+      });
+    }
     throw new Error(errorMessage);
   }
 
