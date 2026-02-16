@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
+import { pullListingPreview } from "@/src/lib/listingPreviewClient";
 
 function makeInviteCode(length = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -36,12 +37,31 @@ function extractFirestoreError(err: unknown) {
   };
 }
 
+function parseHttpUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function CreateTripPage() {
   const router = useRouter();
   const { user, loading, preferredDisplayName } = useAuth();
 
   const [tripName, setTripName] = useState("New Trip");
   const [listingUrl, setListingUrl] = useState("");
+  const [listingTitle, setListingTitle] = useState("");
+  const [listingImageUrl, setListingImageUrl] = useState("");
+  const [listingBedrooms, setListingBedrooms] = useState<number | null>(null);
+  const [listingBeds, setListingBeds] = useState<number | null>(null);
+  const [listingBaths, setListingBaths] = useState<number | null>(null);
   const [totalPrice, setTotalPrice] = useState<number>(2000);
   const [roomCount, setRoomCount] = useState<number>(4);
   const [pricingMode, setPricingMode] = useState<PricingMode>("equalSplit");
@@ -51,8 +71,9 @@ export default function CreateTripPage() {
   const [durationHours, setDurationHours] = useState<number>(24);
 
   const [busy, setBusy] = useState(false);
+  const [pullingListing, setPullingListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewWarning, setPreviewWarning] = useState<string | null>(null);
+  const [listingPullError, setListingPullError] = useState<string | null>(null);
 
   useEffect(() => {
     const count = Math.max(1, Number(roomCount) || 1);
@@ -92,12 +113,57 @@ export default function CreateTripPage() {
     return parsed.toString();
   }
 
+  async function pullListing() {
+    if (!user) return;
+
+    const listingUrlForPull = parseHttpUrl(listingUrl);
+    if (!listingUrlForPull) {
+      setListingPullError("Enter a valid http(s) listing URL to pull preview.");
+      return;
+    }
+
+    setPullingListing(true);
+    setListingPullError(null);
+
+    try {
+      const idToken = await user.getIdToken();
+      const pulled = await pullListingPreview({
+        idToken,
+        listingUrl: listingUrlForPull,
+      });
+
+      setListingUrl(listingUrlForPull);
+      setListingTitle(pulled.listingTitle ?? "");
+      setListingImageUrl(pulled.listingImageUrl ?? "");
+      setListingBedrooms(pulled.listingBedrooms);
+      setListingBeds(pulled.listingBeds);
+      setListingBaths(pulled.listingBaths);
+
+      if (
+        !pulled.listingTitle &&
+        !pulled.listingImageUrl &&
+        pulled.listingBedrooms === null &&
+        pulled.listingBeds === null &&
+        pulled.listingBaths === null
+      ) {
+        setListingPullError("Couldn’t fetch preview (some sites block previews). You can still use the link.");
+      }
+    } catch (err) {
+      const parsed = extractFirestoreError(err);
+      setListingPullError(
+        parsed.message || "Couldn’t fetch preview (some sites block previews). You can still use the link."
+      );
+    } finally {
+      setPullingListing(false);
+    }
+  }
+
   async function createTrip() {
     if (!user) return;
 
     setBusy(true);
     setError(null);
-    setPreviewWarning(null);
+    setListingPullError(null);
 
     const P = Number(totalPrice);
     const N = Number(roomCount);
@@ -158,13 +224,13 @@ export default function CreateTripPage() {
       status: "draft",
       inviteCode,
       pricingMode,
-      listingTitle: null,
-      listingImageUrl: null,
+      listingTitle: listingTitle.trim() || null,
+      listingImageUrl: listingImageUrl.trim() || null,
       listingDescription: null,
       listingSiteName: null,
-      listingBedrooms: null,
-      listingBeds: null,
-      listingBaths: null,
+      listingBedrooms,
+      listingBeds,
+      listingBaths,
 
       totalPrice: P,
       roomCount: N,
@@ -278,37 +344,6 @@ export default function CreateTripPage() {
       console.warn("[createTrip] user_index_create failed", { code: parsed.code, message: parsed.message });
     }
 
-    // STEP 4: best-effort listing preview refresh (non-fatal).
-    if (listingUrlValue) {
-      try {
-        const idToken = await writeUser.getIdToken();
-        const response = await fetch("/api/listing-preview", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ tripId, listingUrl: listingUrlValue }),
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: unknown };
-          const apiError =
-            typeof payload.error === "string" && payload.error.trim()
-              ? payload.error.trim()
-              : "Couldn’t fetch listing preview yet. You can still continue.";
-          throw new Error(apiError);
-        }
-      } catch (err) {
-        const parsed = extractFirestoreError(err);
-        console.warn("[createTrip] listing_preview_refresh failed", {
-          code: parsed.code,
-          message: parsed.message,
-        });
-        setPreviewWarning("Couldn’t fetch listing preview yet. You can still continue.");
-      }
-    }
-
     try {
       router.push(`/trip/${tripId}?code=${inviteCode}`);
     } finally {
@@ -320,6 +355,7 @@ export default function CreateTripPage() {
   if (!user) return <main className="page">Please sign in.</main>;
 
   const safeRoomCount = Math.max(1, Number(roomCount) || 1);
+  const pullableListingUrl = parseHttpUrl(listingUrl);
   const equalSplitStartingPrice = Math.round((Number(totalPrice) || 0) / safeRoomCount);
   const roomStartingPreview = Array.from({ length: safeRoomCount }, (_, index) => {
     if (pricingMode === "zero") return 0;
@@ -331,6 +367,11 @@ export default function CreateTripPage() {
     }
     return equalSplitStartingPrice;
   });
+  const listingStatsPreview = [
+    listingBedrooms !== null ? `${listingBedrooms} ${listingBedrooms === 1 ? "bedroom" : "bedrooms"}` : null,
+    listingBeds !== null ? `${listingBeds} ${listingBeds === 1 ? "bed" : "beds"}` : null,
+    listingBaths !== null ? `${listingBaths} ${listingBaths === 1 ? "bath" : "baths"}` : null,
+  ].filter((value): value is string => Boolean(value));
 
   return (
     <main className="page">
@@ -359,6 +400,58 @@ export default function CreateTripPage() {
               onChange={(e) => setListingUrl(e.target.value)}
             />
           </label>
+
+          <div className="row">
+            <button
+              type="button"
+              className="button secondary"
+              onClick={pullListing}
+              disabled={!pullableListingUrl || pullingListing || busy}
+            >
+              {pullingListing ? "Pulling…" : "Pull listing"}
+            </button>
+            {pullableListingUrl ? (
+              <span className="muted" style={{ fontSize: 13 }}>
+                Click Pull listing to preview.
+              </span>
+            ) : null}
+          </div>
+
+          {listingPullError ? <p className="notice">{listingPullError}</p> : null}
+
+          {(listingImageUrl || listingTitle || listingStatsPreview.length > 0) ? (
+            <div className="list-item" style={{ display: "grid", gap: 10 }}>
+              {listingImageUrl ? (
+                <img
+                  src={listingImageUrl}
+                  alt={listingTitle || "Listing preview"}
+                  style={{
+                    width: "100%",
+                    maxWidth: 420,
+                    borderRadius: 10,
+                    border: "1px solid var(--line)",
+                    objectFit: "cover",
+                    maxHeight: 260,
+                  }}
+                />
+              ) : null}
+              <div style={{ display: "grid", gap: 6 }}>
+                <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Listing preview
+                </div>
+                <div>{listingTitle || "Listing title unavailable"}</div>
+                {listingStatsPreview.length > 0 ? (
+                  <div className="row">
+                    {listingStatsPreview.map((value) => (
+                      <span key={value} className="pill">
+                        {value}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           <label className="label">
             Total trip price ($)
@@ -456,7 +549,6 @@ export default function CreateTripPage() {
           </div>
 
           {error && <p className="notice">{error}</p>}
-          {previewWarning ? <p className="notice">{previewWarning}</p> : null}
         </div>
       </section>
     </main>

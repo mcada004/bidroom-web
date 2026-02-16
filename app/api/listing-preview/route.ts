@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
 
   const tripId = asNonEmptyString(body.tripId);
   const listingUrl = asNonEmptyString(body.listingUrl);
-  if (!tripId) return NextResponse.json({ error: "tripId is required." }, { status: 400 });
   if (!listingUrl) return NextResponse.json({ error: "listingUrl is required." }, { status: 400 });
 
   let config: ReturnType<typeof getConfig>;
@@ -82,15 +81,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ownerUid = await getTripCreatedByUid(config.projectId, tripId);
-  if (!ownerUid) {
-    return NextResponse.json({ error: "Trip not found." }, { status: 404 });
-  }
-  if (uid !== ownerUid) {
-    return NextResponse.json(
-      { error: "Only the trip manager can refresh listing preview data." },
-      { status: 403 }
-    );
+  if (tripId) {
+    const ownerUid = await getTripCreatedByUid(config.projectId, tripId);
+    if (!ownerUid) {
+      return NextResponse.json({ error: "Trip not found." }, { status: 404 });
+    }
+    if (uid !== ownerUid) {
+      return NextResponse.json(
+        { error: "Only the trip manager can refresh listing preview data." },
+        { status: 403 }
+      );
+    }
   }
 
   try {
@@ -100,39 +101,43 @@ export async function POST(request: NextRequest) {
       searchApiBaseUrl: config.searchApiBaseUrl,
     });
 
-    await patchTripFields({
-      projectId: config.projectId,
-      tripId,
-      idToken: token,
-      fields: {
-        listingUrl: preview.listingUrl,
-        listingPreview: preview,
-        listingTitle: preview.title,
-        listingImageUrl: preview.primaryPhotoUrl,
-        listingBedrooms: preview.bedrooms,
-        listingBeds: preview.beds,
-        listingBaths: preview.bathrooms,
-        listingPreviewUpdatedAt: new Date().toISOString(),
-        listingPreviewError: null,
-      },
-    });
-
-    return NextResponse.json({ ok: true, preview });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Listing preview refresh failed.";
-
-    try {
+    if (tripId) {
       await patchTripFields({
         projectId: config.projectId,
         tripId,
         idToken: token,
         fields: {
-          listingPreviewError: message,
+          listingUrl: preview.listingUrl,
+          listingPreview: preview,
+          listingTitle: preview.title,
+          listingImageUrl: preview.primaryPhotoUrl,
+          listingBedrooms: preview.bedrooms,
+          listingBeds: preview.beds,
+          listingBaths: preview.bathrooms,
           listingPreviewUpdatedAt: new Date().toISOString(),
+          listingPreviewError: null,
         },
       });
-    } catch {
-      // Best effort: keep the original provider error in the API response.
+    }
+
+    return NextResponse.json({ ok: true, preview });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Listing preview refresh failed.";
+
+    if (tripId) {
+      try {
+        await patchTripFields({
+          projectId: config.projectId,
+          tripId,
+          idToken: token,
+          fields: {
+            listingPreviewError: message,
+            listingPreviewUpdatedAt: new Date().toISOString(),
+          },
+        });
+      } catch {
+        // Best effort: keep the original provider error in the API response.
+      }
     }
 
     return NextResponse.json({ error: message }, { status: 422 });

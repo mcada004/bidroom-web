@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
+import { pullListingPreview } from "@/src/lib/listingPreviewClient";
 
 type TripStatus = "draft" | "live" | "ended";
 
@@ -270,50 +271,29 @@ export default function TripSettingsPage() {
       }
 
       const idToken = await user.getIdToken();
-      const response = await fetch("/api/link-preview", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ url: listingUrlValue }),
+      const pulled = await pullListingPreview({
+        idToken,
+        listingUrl: listingUrlValue,
+        tripId,
       });
 
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        title?: string | null;
-        image?: string | null;
-        description?: string | null;
-        siteName?: string | null;
-        hostname?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not refresh preview for this listing URL.");
-      }
-
-      const nextTitle = typeof payload.title === "string" ? payload.title.trim() : "";
-      const nextImageUrl = typeof payload.image === "string" ? payload.image.trim() : "";
-      const nextDescription = typeof payload.description === "string" ? payload.description.trim() : "";
-      const nextSiteName = typeof payload.siteName === "string" ? payload.siteName.trim() : "";
-      const fallbackHostname = extractHostname(listingUrlValue) ?? "";
-      const resolvedSite = nextSiteName || payload.hostname || fallbackHostname;
+      const nextTitle = pulled.listingTitle ?? "";
+      const nextImageUrl = pulled.listingImageUrl ?? "";
+      const nextDescription = "";
+      const resolvedSite = extractHostname(listingUrlValue) ?? "";
 
       setListingTitle(nextTitle);
       setListingImageUrl(nextImageUrl);
       setListingDescription(nextDescription);
       setListingSiteName(resolvedSite);
 
-      await updateDoc(doc(db, "trips", tripId), {
-        listingUrl: listingUrlValue,
-        listingTitle: nextTitle || null,
-        listingImageUrl: nextImageUrl || null,
-        listingDescription: nextDescription || null,
-        listingSiteName: resolvedSite || null,
-        updatedAt: serverTimestamp(),
-      });
-
-      if (!nextTitle && !nextImageUrl && !nextDescription) {
+      if (
+        !nextTitle &&
+        !nextImageUrl &&
+        pulled.listingBedrooms === null &&
+        pulled.listingBeds === null &&
+        pulled.listingBaths === null
+      ) {
         setPreviewError("Preview is limited for this site, but the URL was saved.");
       }
     } catch (previewErr: unknown) {
@@ -596,7 +576,7 @@ export default function TripSettingsPage() {
                 {previewLoading ? "Refreshing…" : "Refresh preview"}
               </button>
               <span className="muted" style={{ fontSize: 13 }}>
-                Uses /api/link-preview
+                Uses /api/listing-preview
               </span>
             </div>
           ) : null}
