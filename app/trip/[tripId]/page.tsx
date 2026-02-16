@@ -117,6 +117,7 @@ declare global {
 }
 
 const DEBUG_BIDS = process.env.NEXT_PUBLIC_DEBUG_BIDS === "true";
+const DEBUG_ISOLATE_BID_WRITE = process.env.NEXT_PUBLIC_DEBUG_ISOLATE_BID_WRITE === "true";
 const GUEST_BIDDER_NAME_KEY = "bidroom_guest_bidder_name";
 
 function extractFirestoreError(err: unknown) {
@@ -791,6 +792,85 @@ export default function TripPage() {
         currentHighBidTimeMs: bidTimeMsPreview,
       },
     });
+    if (DEBUG_ISOLATE_BID_WRITE) {
+      const authUid = authUser?.uid ?? null;
+      const authIsAnonymous = authUser?.isAnonymous ?? false;
+      const bidOnlyRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
+      const bidOnlyPayload = {
+        amount: typedBid,
+        bidderUid: uid,
+        bidTimeMs: bidTimeMsPreview,
+        createdAt: createdAtPreview,
+      };
+      const roomOnlyRef = doc(db, "trips", tripId, "rooms", room.id);
+      const roomOnlyPayload = {
+        currentHighBidAmount: typedBid,
+        currentHighBidderUid: uid,
+        currentHighBidAt: currentHighBidAtPreview,
+        currentHighBidTimeMs: bidTimeMsPreview,
+      };
+
+      let bidOnlySucceeded = false;
+      let roomOnlySucceeded = false;
+
+      try {
+        await setDoc(bidOnlyRef, bidOnlyPayload);
+        bidOnlySucceeded = true;
+        console.error("[bid-isolate]", {
+          stage: "bid_only",
+          path: bidOnlyRef.path,
+          payload: bidOnlyPayload,
+          "auth.uid": authUid,
+          "auth.isAnonymous": authIsAnonymous,
+          "error.code": null,
+          "error.message": null,
+        });
+      } catch (bidOnlyErr: unknown) {
+        const parsed = extractFirestoreError(bidOnlyErr);
+        console.error("[bid-isolate]", {
+          stage: "bid_only",
+          path: bidOnlyRef.path,
+          payload: bidOnlyPayload,
+          "auth.uid": authUid,
+          "auth.isAnonymous": authIsAnonymous,
+          "error.code": parsed.code,
+          "error.message": parsed.message,
+        });
+      }
+
+      try {
+        await updateDoc(roomOnlyRef, roomOnlyPayload);
+        roomOnlySucceeded = true;
+        console.error("[bid-isolate]", {
+          stage: "room_only",
+          path: roomOnlyRef.path,
+          payload: roomOnlyPayload,
+          "auth.uid": authUid,
+          "auth.isAnonymous": authIsAnonymous,
+          "error.code": null,
+          "error.message": null,
+        });
+      } catch (roomOnlyErr: unknown) {
+        const parsed = extractFirestoreError(roomOnlyErr);
+        console.error("[bid-isolate]", {
+          stage: "room_only",
+          path: roomOnlyRef.path,
+          payload: roomOnlyPayload,
+          "auth.uid": authUid,
+          "auth.isAnonymous": authIsAnonymous,
+          "error.code": parsed.code,
+          "error.message": parsed.message,
+        });
+      }
+
+      if (!bidOnlySucceeded || !roomOnlySucceeded) {
+        setBidActionError("Isolated bid debug detected a permission failure. Check console [bid-isolate] logs.");
+      } else {
+        setBidActionError("Isolated bid debug writes succeeded (bid_only and room_only).");
+      }
+      setBusyRoomId(null);
+      return;
+    }
     debugBidLog("bid_tx_paths", { tripPath: tripRefPath, roomPath: roomRefPath, bidPath: null });
     let bidRefPath: string | null = null;
     let txStage = "start";
