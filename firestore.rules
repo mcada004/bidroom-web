@@ -129,8 +129,20 @@ service cloud.firestore {
       }
     }
 
-    match /users/{userId}/myTrips/{tripId} {
-      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.firstName is string &&
+        request.resource.data.firstName.size() >= 1 &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
+        request.resource.data.createdAt is timestamp;
+      allow delete: if false;
+
+      match /myTrips/{tripId} {
+        allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+      }
     }
   }
 }

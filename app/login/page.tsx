@@ -4,7 +4,7 @@ import LoginClient from "./LoginClient";
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="page">Loading…</div>}>
-      <LoginClient />
+      <LoginClient createAccountHref="/create-account" />
     </Suspense>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FirebaseError } from "firebase/app";
 import {
-  createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -19,7 +19,11 @@ function sanitizeNextPath(raw: string | null) {
   return raw;
 }
 
-export default function LoginClient() {
+type LoginClientProps = {
+  createAccountHref: string;
+};
+
+export default function LoginClient({ createAccountHref }: LoginClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -54,19 +58,6 @@ export default function LoginClient() {
         return "Network error. Check your connection and try again.";
       default:
         return "We couldn't send a reset link right now. Please try again.";
-    }
-  }
-
-  async function handleSignUp() {
-    setError(null);
-    setBusy(true);
-    try {
-      await createUserWithEmailAndPassword(auth, email.trim(), password);
-      goToNext();
-    } catch (e: unknown) {
-      setError(getErrorMessage(e, "Sign up failed"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -250,9 +241,9 @@ export default function LoginClient() {
             <button className="button" disabled={busy} onClick={handleSignIn}>
               Sign in
             </button>
-            <button className="button secondary" disabled={busy} onClick={handleSignUp}>
+            <Link className="button secondary" href={createAccountHref}>
               Create account
-            </button>
+            </Link>
           </div>
 
           {error && <p className="notice">{error}</p>}
