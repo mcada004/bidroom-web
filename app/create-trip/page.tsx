@@ -133,7 +133,8 @@ export default function CreateTripPage() {
     const equalSplitStartingPrice = Math.round(P / N);
     const presetValues = Array.from({ length: N }, (_, index) => {
       const raw = Number(presetStartingPrices[index] ?? 0);
-      return Number.isFinite(raw) ? Math.round(raw) : 0;
+      if (!Number.isFinite(raw)) return 0;
+      return raw;
     });
     if (pricingMode === "preset") {
       const invalidIndex = presetValues.findIndex((value) => value < 0);
@@ -146,7 +147,7 @@ export default function CreateTripPage() {
     const roomStartingPrices = Array.from({ length: N }, (_, index) => {
       if (pricingMode === "zero") return 0;
       if (pricingMode === "firstBid") return 0;
-      if (pricingMode === "preset") return presetValues[index] ?? 0;
+      if (pricingMode === "preset") return Math.round(presetValues[index] ?? 0);
       return equalSplitStartingPrice;
     });
     const startingPricePerRoom = equalSplitStartingPrice;
