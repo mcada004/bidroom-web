@@ -52,6 +52,7 @@ export default function CreateTripPage() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewWarning, setPreviewWarning] = useState<string | null>(null);
 
   useEffect(() => {
     const count = Math.max(1, Number(roomCount) || 1);
@@ -96,6 +97,7 @@ export default function CreateTripPage() {
 
     setBusy(true);
     setError(null);
+    setPreviewWarning(null);
 
     const P = Number(totalPrice);
     const N = Number(roomCount);
@@ -276,6 +278,37 @@ export default function CreateTripPage() {
       console.warn("[createTrip] user_index_create failed", { code: parsed.code, message: parsed.message });
     }
 
+    // STEP 4: best-effort listing preview refresh (non-fatal).
+    if (listingUrlValue) {
+      try {
+        const idToken = await writeUser.getIdToken();
+        const response = await fetch("/api/listing-preview", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ tripId, listingUrl: listingUrlValue }),
+        });
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as { error?: unknown };
+          const apiError =
+            typeof payload.error === "string" && payload.error.trim()
+              ? payload.error.trim()
+              : "Couldn’t fetch listing preview yet. You can still continue.";
+          throw new Error(apiError);
+        }
+      } catch (err) {
+        const parsed = extractFirestoreError(err);
+        console.warn("[createTrip] listing_preview_refresh failed", {
+          code: parsed.code,
+          message: parsed.message,
+        });
+        setPreviewWarning("Couldn’t fetch listing preview yet. You can still continue.");
+      }
+    }
+
     try {
       router.push(`/trip/${tripId}?code=${inviteCode}`);
     } finally {
@@ -423,6 +456,7 @@ export default function CreateTripPage() {
           </div>
 
           {error && <p className="notice">{error}</p>}
+          {previewWarning ? <p className="notice">{previewWarning}</p> : null}
         </div>
       </section>
     </main>

@@ -54,6 +54,8 @@ type Trip = {
   listingImageUrl?: string | null;
   listingDescription?: string | null;
   listingSiteName?: string | null;
+  listingPreviewError?: string | null;
+  listingPreviewUpdatedAt?: unknown;
   listingBedrooms?: number | null;
   listingBeds?: number | null;
   listingBaths?: number | null;
@@ -1032,8 +1034,19 @@ export default function TripPage() {
   const hasListingPreviewData = Boolean(
     trip.listingImageUrl || trip.listingTitle || trip.listingSiteName || listingDescription
   );
+  const hasListingStats = listingStats.length > 0;
+  const listingPreviewError =
+    typeof trip.listingPreviewError === "string" && trip.listingPreviewError.trim()
+      ? trip.listingPreviewError.trim()
+      : null;
+  const listingPreviewLoading = Boolean(
+    trip.listingUrl &&
+      !hasListingPreviewData &&
+      !hasListingStats &&
+      !listingPreviewError
+  );
   const shouldShowListingPreviewCard = Boolean(
-    hasListingPreviewData || listingStats.length > 0 || trip.listingUrl
+    hasListingPreviewData || hasListingStats || trip.listingUrl
   );
 
   return (
@@ -1189,11 +1202,13 @@ export default function TripPage() {
                 ) : null}
               </div>
             </div>
+          ) : listingPreviewLoading ? (
+            <div className="notice">Loading listing preview…</div>
           ) : trip.listingUrl ? (
             <div className="notice">Preview unavailable — site blocks scraping</div>
           ) : null}
 
-          {listingStats.length > 0 ? (
+          {hasListingStats ? (
             <div className="row" style={{ marginTop: 12 }}>
               {listingStats.map((value) => (
                 <span key={value} className="pill">
