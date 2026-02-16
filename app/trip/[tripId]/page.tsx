@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   collection,
   doc,
@@ -90,7 +90,7 @@ function minIncrementFor(currentHighBidAmount: number) {
 function minAllowedForRoom(room: Room) {
   const current = Number(room.currentHighBidAmount ?? 0);
   const starting = Number(room.startingPrice ?? 0);
-  return current === 0 ? starting : current + minIncrementFor(current);
+  return current === 0 ? Math.max(starting, 20) : current + minIncrementFor(current);
 }
 
 type FirestoreLikeError = {
@@ -110,7 +110,6 @@ declare global {
 }
 
 const DEBUG_BIDS = process.env.NEXT_PUBLIC_DEBUG_BIDS === "true";
-const DEBUG_BID_SPLIT = process.env.NEXT_PUBLIC_DEBUG_BID_SPLIT === "true";
 
 function extractFirestoreError(err: unknown) {
   const asObj = (err ?? {}) as FirestoreLikeError;
@@ -146,8 +145,6 @@ function debugBidWriteIntent(payload: {
 export default function TripPage() {
   const params = useParams<{ tripId: string }>();
   const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
   const tripId = params.tripId;
   const inviteCode = useMemo(() => searchParams.get("code") ?? "", [searchParams]);
 
@@ -166,14 +163,6 @@ export default function TripPage() {
   const [copyError, setCopyError] = useState<string | null>(null);
 
   const [nowMs, setNowMs] = useState(Date.now());
-
-  useEffect(() => {
-    if (loading || user) return;
-
-    const query = searchParams.toString();
-    const next = query ? `${pathname}?${query}` : pathname;
-    router.replace(`/login?next=${encodeURIComponent(next)}`);
-  }, [loading, user, pathname, router, searchParams]);
 
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 1000);
@@ -250,9 +239,10 @@ export default function TripPage() {
 
   function leadingBidderLabel(uid: string | null) {
     if (!uid) return null;
+    if (!user) return "Participant";
     if (memberNameByUid[uid]) return memberNameByUid[uid];
     if (user?.uid === uid) return preferredDisplayName;
-    return "Unknown member";
+    return "Participant";
   }
 
   function maxAllowedForRoom(roomId: string) {
@@ -263,8 +253,6 @@ export default function TripPage() {
 
   // ✅ LIVE subscriptions
   useEffect(() => {
-    if (!user) return;
-
     let unsubTrip: (() => void) | null = null;
     let unsubRooms: (() => void) | null = null;
     let unsubMembers: (() => void) | null = null;
@@ -546,12 +534,13 @@ export default function TripPage() {
     const authUser = auth.currentUser;
     debugBidLog("bid_auth_check", {
       uid: authUser?.uid ?? null,
+      isAnonymous: authUser?.isAnonymous ?? false,
       hasCurrentUser: !!authUser,
     });
     const uid = authUser?.uid;
     const optimisticCurrent = Number(room.currentHighBidAmount ?? 0);
     const optimisticMinIncrement = minIncrementFor(optimisticCurrent);
-    const optimisticMinAllowed = optimisticCurrent === 0 ? Number(room.startingPrice ?? 0) : optimisticCurrent + optimisticMinIncrement;
+    const optimisticMinAllowed = minAllowedForRoom(room);
     const optimisticMaxAllowed = maxAllowedForRoom(room.id);
     const localEndRaw = trip.auctionEndAt ?? null;
     const localEndMs =
@@ -563,6 +552,7 @@ export default function TripPage() {
     const localAuctionLiveNow = trip.status === "live" && (localEndMs === null || nowMs <= localEndMs);
     debugBidLog("bid_preflight", {
       uid: uid ?? null,
+      isAnonymous: authUser?.isAnonymous ?? false,
       tripId,
       roomId: room.id,
       amount: typedBid,
@@ -582,7 +572,7 @@ export default function TripPage() {
     });
 
     if (!uid) {
-      setBidActionError("Sign in to bid.");
+      setBidActionError("Please sign in to bid");
       return;
     }
     setBidActionError(null);
@@ -638,63 +628,6 @@ export default function TripPage() {
     let failureAuctionEnded = !!(endAtMs && nowMs >= endAtMs);
 
     try {
-      if (DEBUG_BID_SPLIT) {
-        const tripRef = doc(db, "trips", tripId);
-        const roomRef = doc(db, "trips", tripId, "rooms", room.id);
-
-        txStage = "split_read_trip_room";
-        const [tripSnap, roomSnap] = await Promise.all([getDoc(tripRef), getDoc(roomRef)]);
-        if (!tripSnap.exists() || !roomSnap.exists()) throw new Error("Missing trip/room");
-
-        const t = tripSnap.data() as any;
-        const r = roomSnap.data() as any;
-        const txNowMs = Date.now();
-
-        const totalPrice = Number(t.totalPrice ?? 0);
-        const current = Number(r.currentHighBidAmount ?? 0);
-        const starting = Number(r.startingPrice ?? 0);
-        const minAllowed = current === 0 ? starting : current + minIncrementFor(current);
-        const txEndRaw = t.auctionEndAt ?? null;
-        const txEndMs = txEndRaw && typeof txEndRaw.toMillis === "function" ? txEndRaw.toMillis() : null;
-
-        failureTripStatus = String(t.status ?? "unknown");
-        failureCurrentBid = current;
-        failureAttemptedBid = typedBid;
-        failureAuctionEnded = txEndMs !== null ? txNowMs > txEndMs : false;
-
-        const sumOther = rooms.reduce((sum, rr) => (rr.id === room.id ? sum : sum + (rr.currentHighBidAmount || 0)), 0);
-        const maxAllowed = Math.max(0, totalPrice - sumOther);
-        if (typedBid < minAllowed) throw new Error(`Bid must be at least $${minAllowed}.`);
-        if (typedBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
-        if (typedBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
-
-        const bidTimeMs = Date.now();
-        const bidRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
-        bidRefPath = bidRef.path;
-        const createdAtTs = Timestamp.now();
-        const currentHighBidAtTs = Timestamp.now();
-
-        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
-        const roomUpdatePayload = {
-          currentHighBidAmount: typedBid,
-          currentHighBidderUid: uid,
-          currentHighBidAt: currentHighBidAtTs,
-          currentHighBidTimeMs: bidTimeMs,
-        };
-
-        debugBidLog("bid_split_payloads", {
-          bidPath: bidRef.path,
-          roomPath: roomRef.path,
-          bidPayload: bidCreatePayload,
-          roomPayload: roomUpdatePayload,
-        });
-        debugBidLog("bid_split_readonly_preview", {
-          reason: "Split mode is read-only; writes are executed only in the main transaction path.",
-          bidPath: bidRef.path,
-          roomPath: roomRef.path,
-        });
-      }
-
       if (DEBUG_BIDS) {
         const memberRef = doc(db, "trips", tripId, "members", uid);
         const memberSnap = await getDoc(memberRef);
@@ -729,7 +662,7 @@ export default function TripPage() {
         const current = Number(r.currentHighBidAmount ?? 0);
         const starting = Number(r.startingPrice ?? 0);
         const minIncrement = minIncrementFor(current);
-        const minAllowed = current === 0 ? starting : current + minIncrement;
+        const minAllowed = current === 0 ? Math.max(starting, 20) : current + minIncrement;
 
         failureTripStatus = String(t.status ?? "unknown");
         failureCurrentBid = current;
@@ -883,7 +816,6 @@ export default function TripPage() {
   }
 
   if (loading) return <main className="page">Auth loading…</main>;
-  if (!user) return <main className="page">Redirecting to sign in…</main>;
   if (error) return <main className="page">{error}</main>;
   if (!trip) return <main className="page">Loading trip…</main>;
 
@@ -961,7 +893,7 @@ export default function TripPage() {
         <ul className="list" style={{ marginTop: 12 }}>
           {members.map((m) => (
             <li key={m.uid} className="list-item">
-              <strong>{m.displayName}</strong>
+              <strong>{authReadyUser ? m.displayName : "Participant"}</strong>
               <div className="muted">{m.role === "manager" ? "Manager" : "Participant"}</div>
             </li>
           ))}
@@ -1067,6 +999,11 @@ export default function TripPage() {
       <section className="card section">
         <div className="section-title">Rooms</div>
         {bidActionError ? <p className="muted" style={{ marginBottom: 10 }}>{bidActionError}</p> : null}
+        {!authReadyUser ? (
+          <p className="muted" style={{ marginBottom: 10 }}>
+            Please sign in to bid
+          </p>
+        ) : null}
         {rooms.length === 0 ? (
           <p className="muted">No rooms found.</p>
         ) : (
