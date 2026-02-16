@@ -26,6 +26,8 @@ service cloud.firestore {
         request.resource.data.displayName.size() >= 2 &&
         request.resource.data.displayName.size() <= 24 &&
         request.resource.data.joinedAt is timestamp &&
+        request.resource.data.joinedAt >= request.time - duration.value(5, "m") &&
+        request.resource.data.joinedAt <= request.time + duration.value(5, "m") &&
         (
           request.resource.data.role == "participant" ||
           (
@@ -189,7 +191,7 @@ service cloud.firestore {
 
         // Users can only create/update their own profile fields.
         // Role escalation is blocked: only the trip creator can use "manager".
-        allow create, update: if isSignedIn() &&
+        allow create, update: if request.auth != null &&
           !isBanned(tripId) &&
           request.auth.uid == memberUid &&
           isValidMemberPayload(tripId, memberUid);

@@ -300,9 +300,9 @@ export default function TripPage() {
       {
         displayName,
         role: memberUid === createdByUid ? "manager" : "participant",
-        joinedAt: serverTimestamp(),
+        joinedAt: Timestamp.now(),
       },
-      { merge: true }
+      { merge: false }
     );
   }
 
@@ -310,6 +310,10 @@ export default function TripPage() {
     if (!trip) return null;
 
     let currentUser = auth.currentUser;
+    debugBidLog("auth_currentUser_before_join", {
+      uid: currentUser?.uid ?? null,
+      isAnonymous: currentUser?.isAnonymous ?? false,
+    });
     if (currentUser && !currentUser.isAnonymous) {
       return currentUser.uid;
     }
@@ -339,8 +343,27 @@ export default function TripPage() {
 
       if (!currentUser) throw new Error("Could not create an anonymous session.");
       await currentUser.getIdToken();
-
-      await upsertMemberProfile(currentUser.uid, chosenName, trip.createdByUid);
+      const memberRef = doc(db, "trips", tripId, "members", currentUser.uid);
+      const memberPayload = {
+        displayName: chosenName,
+        role: "participant" as const,
+        joinedAt: Timestamp.now(),
+      };
+      debugBidLog("member_write_payload", {
+        displayName: memberPayload.displayName,
+        role: memberPayload.role,
+        joinedAtType: "timestamp",
+      });
+      try {
+        await setDoc(memberRef, memberPayload, { merge: false });
+      } catch (memberWriteErr: unknown) {
+        const memberParsed = extractFirestoreError(memberWriteErr);
+        debugBidLog("member_write_error", {
+          code: memberParsed.code,
+          message: memberParsed.message,
+        });
+        throw memberWriteErr;
+      }
       setStoredGuestBidderName(chosenName);
       setBidAuthUser(currentUser);
       debugBidLog("guest_join_success", { uid: currentUser.uid, displayName: chosenName });
