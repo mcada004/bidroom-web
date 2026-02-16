@@ -871,6 +871,8 @@ export default function TripPage() {
         if (typedBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
 
         const bidTimeMs = Date.now();
+        const createdAtTs = Timestamp.now();
+        const currentHighBidAtTs = Timestamp.now();
         // tie-break earliest wins
         const existingAmt = Number(r.currentHighBidAmount ?? 0);
         const existingTime = typeof r.currentHighBidTimeMs === "number" ? r.currentHighBidTimeMs : null;
@@ -900,7 +902,7 @@ export default function TripPage() {
           bidTimeMs,
         });
 
-        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: serverTimestamp() };
+        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
         debugBidLog("bid_create_payload", bidCreatePayload);
         txStage = "write_bid_doc";
         tx.set(bidRef, bidCreatePayload);
@@ -908,7 +910,7 @@ export default function TripPage() {
         const roomUpdatePayload = {
           currentHighBidAmount: typedBid,
           currentHighBidderUid: uid,
-          currentHighBidAt: serverTimestamp(),
+          currentHighBidAt: currentHighBidAtTs,
           currentHighBidTimeMs: bidTimeMs,
         };
         debugBidLog("tx_room_path", { roomPath: roomRef.path });
