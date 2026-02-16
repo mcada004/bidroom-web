@@ -49,6 +49,8 @@ type Trip = {
   listingUrl?: string | null;
   listingTitle?: string | null;
   listingImageUrl?: string | null;
+  listingDescription?: string | null;
+  listingSiteName?: string | null;
   listingBedrooms?: number | null;
   listingBeds?: number | null;
   listingBaths?: number | null;
@@ -897,7 +899,21 @@ export default function TripPage() {
     formatListingCount(trip.listingBeds, "bed"),
     formatListingCount(trip.listingBaths, "bath"),
   ].filter((value): value is string => Boolean(value));
-  const hasListingPreviewData = Boolean(trip.listingImageUrl || trip.listingTitle);
+  let listingHostname: string | null = null;
+  if (trip.listingUrl) {
+    try {
+      listingHostname = new URL(trip.listingUrl).hostname;
+    } catch {
+      listingHostname = null;
+    }
+  }
+  const listingDescription =
+    typeof trip.listingDescription === "string" && trip.listingDescription.trim()
+      ? trip.listingDescription.trim()
+      : null;
+  const hasListingPreviewData = Boolean(
+    trip.listingImageUrl || trip.listingTitle || trip.listingSiteName || listingDescription
+  );
   const shouldShowListingPreviewCard = Boolean(
     hasListingPreviewData || listingStats.length > 0 || trip.listingUrl
   );
@@ -1014,6 +1030,16 @@ export default function TripPage() {
               ) : null}
               <div style={{ display: "grid", gap: 8 }}>
                 <strong>{trip.listingTitle || "Listing title unavailable"}</strong>
+                {(trip.listingSiteName || listingHostname) ? (
+                  <div className="muted">{trip.listingSiteName || listingHostname}</div>
+                ) : null}
+                {listingDescription ? (
+                  <div className="muted">
+                    {listingDescription.length > 260
+                      ? `${listingDescription.slice(0, 257)}...`
+                      : listingDescription}
+                  </div>
+                ) : null}
                 {trip.listingUrl ? (
                   <a className="link" href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
                     View full listing

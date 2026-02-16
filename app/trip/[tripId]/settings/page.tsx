@@ -24,6 +24,8 @@ type Trip = {
   listingPreviewError?: string | null;
   listingTitle?: string | null;
   listingImageUrl?: string | null;
+  listingDescription?: string | null;
+  listingSiteName?: string | null;
   listingBedrooms?: number | null;
   listingBeds?: number | null;
   listingBaths?: number | null;
@@ -34,20 +36,6 @@ type Trip = {
 
   antiSnipeWindowMinutes: number;
   antiSnipeExtendMinutes: number;
-};
-
-type ListingPreview = {
-  provider: "searchapi";
-  platform: "airbnb" | "vrbo";
-  listingId: string | null;
-  listingUrl: string;
-  sourceUrl: string | null;
-  title: string | null;
-  bedrooms: number | null;
-  beds: number | null;
-  bathrooms: number | null;
-  primaryPhotoUrl: string | null;
-  refreshedAt: string;
 };
 
 type Room = {
@@ -73,6 +61,8 @@ export default function TripSettingsPage() {
   const [listingUrl, setListingUrl] = useState("");
   const [listingTitle, setListingTitle] = useState("");
   const [listingImageUrl, setListingImageUrl] = useState("");
+  const [listingDescription, setListingDescription] = useState("");
+  const [listingSiteName, setListingSiteName] = useState("");
   const [listingBedrooms, setListingBedrooms] = useState("");
   const [listingBeds, setListingBeds] = useState("");
   const [listingBaths, setListingBaths] = useState("");
@@ -102,6 +92,14 @@ export default function TripSettingsPage() {
     }
 
     return value;
+  }
+
+  function extractHostname(value: string) {
+    try {
+      return new URL(value).hostname;
+    } catch {
+      return null;
+    }
   }
 
   function optionalCountToInput(value: unknown) {
@@ -153,6 +151,8 @@ export default function TripSettingsPage() {
         setListingUrl(typeof t.listingUrl === "string" ? t.listingUrl : "");
         setListingTitle(typeof t.listingTitle === "string" ? t.listingTitle : "");
         setListingImageUrl(typeof t.listingImageUrl === "string" ? t.listingImageUrl : "");
+        setListingDescription(typeof t.listingDescription === "string" ? t.listingDescription : "");
+        setListingSiteName(typeof t.listingSiteName === "string" ? t.listingSiteName : "");
         setListingBedrooms(optionalCountToInput(t.listingBedrooms));
         setListingBeds(optionalCountToInput(t.listingBeds));
         setListingBaths(optionalCountToInput(t.listingBaths));
@@ -205,6 +205,8 @@ export default function TripSettingsPage() {
         listingUrl: listingUrlValue,
         listingTitle: listingChanged ? null : listingTitle || null,
         listingImageUrl: listingChanged ? null : listingImageUrl || null,
+        listingDescription: listingChanged ? null : listingDescription || null,
+        listingSiteName: listingChanged ? null : listingSiteName || null,
         listingBedrooms: listingBedroomsValue,
         listingBeds: listingBedsValue,
         listingBaths: listingBathsValue,
@@ -218,6 +220,8 @@ export default function TripSettingsPage() {
       if (listingChanged) {
         setListingTitle("");
         setListingImageUrl("");
+        setListingDescription("");
+        setListingSiteName("");
       }
       setPreviewError(null);
 
@@ -242,42 +246,57 @@ export default function TripSettingsPage() {
       if (!listingUrlValue) throw new Error("Add a listing URL before previewing.");
 
       const idToken = await user.getIdToken();
-      const response = await fetch("/api/listing-preview", {
+      const response = await fetch("/api/link-preview", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ tripId, listingUrl: listingUrlValue }),
+        body: JSON.stringify({ url: listingUrlValue }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
-        preview?: ListingPreview;
+        url?: string;
+        title?: string | null;
+        image?: string | null;
+        description?: string | null;
+        siteName?: string | null;
+        hostname?: string;
       };
-      if (!response.ok) throw new Error(payload.error ?? "Preview unavailable.");
-      const nextPreview = payload.preview;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Couldn’t fetch preview (some sites block previews). You can still use the link.");
+      }
 
-      const nextTitle = nextPreview?.title?.trim() ?? "";
-      const nextImageUrl = nextPreview?.primaryPhotoUrl?.trim() ?? "";
-      const nextBedrooms = optionalCountToInput(nextPreview?.bedrooms);
-      const nextBeds = optionalCountToInput(nextPreview?.beds);
-      const nextBaths = optionalCountToInput(nextPreview?.bathrooms);
+      const nextTitle = typeof payload.title === "string" ? payload.title.trim() : "";
+      const nextImageUrl = typeof payload.image === "string" ? payload.image.trim() : "";
+      const nextDescription = typeof payload.description === "string" ? payload.description.trim() : "";
+      const nextSiteName = typeof payload.siteName === "string" ? payload.siteName.trim() : "";
+      const fallbackHostname = extractHostname(listingUrlValue) ?? "";
 
       setListingTitle(nextTitle);
       setListingImageUrl(nextImageUrl);
-      setListingBedrooms(nextBedrooms);
-      setListingBeds(nextBeds);
-      setListingBaths(nextBaths);
+      setListingDescription(nextDescription);
+      setListingSiteName(nextSiteName || payload.hostname || fallbackHostname);
 
-      if (!nextTitle && !nextImageUrl && !nextBedrooms && !nextBeds && !nextBaths) {
-        setPreviewError("Preview returned no listing metadata.");
+      await updateDoc(doc(db, "trips", tripId), {
+        listingUrl: listingUrlValue,
+        listingTitle: nextTitle || null,
+        listingImageUrl: nextImageUrl || null,
+        listingDescription: nextDescription || null,
+        listingSiteName: (nextSiteName || payload.hostname || fallbackHostname) || null,
+      });
+
+      if (!nextTitle && !nextImageUrl && !nextDescription) {
+        setPreviewError("Couldn’t fetch preview (some sites block previews). You can still use the link.");
       }
     } catch (e: any) {
-      const message = e?.message ?? "Preview unavailable.";
+      const message = e?.message ?? "Couldn’t fetch preview (some sites block previews). You can still use the link.";
       const isValidationError =
         typeof message === "string" &&
         (message.startsWith("Listing link") || message.startsWith("Add a listing URL"));
-      setPreviewError(isValidationError ? message : "Preview unavailable.");
+      setPreviewError(
+        isValidationError ? message : "Couldn’t fetch preview (some sites block previews). You can still use the link."
+      );
     } finally {
       setPreviewLoading(false);
     }
@@ -350,10 +369,10 @@ export default function TripSettingsPage() {
                 className="button secondary"
                 type="button"
               >
-                {previewLoading ? "Refreshing preview…" : "Refresh listing preview"}
+                {previewLoading ? "Previewing…" : "Preview"}
               </button>
               <span className="muted" style={{ fontSize: 13 }}>
-                Pulls title, photo, bedrooms, beds, and baths
+                Pulls title, image, site, and description
               </span>
             </div>
           ) : null}
@@ -379,11 +398,23 @@ export default function TripSettingsPage() {
                   }}
                 />
               ) : null}
-              <div>
+              <div style={{ display: "grid", gap: 6 }}>
                 <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   Listing preview
                 </div>
                 <div>{listingTitle || "Title unavailable"}</div>
+                {(listingSiteName || listingUrl) && (
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {listingSiteName || extractHostname(listingUrl) || ""}
+                  </div>
+                )}
+                {listingDescription ? (
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {listingDescription.length > 220
+                      ? `${listingDescription.slice(0, 217)}...`
+                      : listingDescription}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}

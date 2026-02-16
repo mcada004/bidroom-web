@@ -159,6 +159,8 @@ export default function CreateTripPage() {
       pricingMode,
       listingTitle: null,
       listingImageUrl: null,
+      listingDescription: null,
+      listingSiteName: null,
       listingBedrooms: null,
       listingBeds: null,
       listingBaths: null,

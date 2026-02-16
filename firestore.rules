@@ -36,6 +36,30 @@ service cloud.firestore {
         (data.listingUrl is string && data.listingUrl.matches('^https?://.+'));
     }
 
+    function isValidLinkPreviewPayload(data) {
+      return data.keys().hasOnly([
+          "url",
+          "title",
+          "image",
+          "description",
+          "siteName",
+          "hostname",
+          "fetchedAt"
+        ]) &&
+        data.url is string &&
+        data.url.matches('^https?://.+') &&
+        data.url.size() <= 2048 &&
+        (data.title == null || (data.title is string && data.title.size() <= 500)) &&
+        (data.image == null || (data.image is string && data.image.matches('^https?://.+') && data.image.size() <= 2048)) &&
+        (data.description == null || (data.description is string && data.description.size() <= 4000)) &&
+        (data.siteName == null || (data.siteName is string && data.siteName.size() <= 255)) &&
+        data.hostname is string &&
+        data.hostname.size() > 0 &&
+        data.hostname.size() <= 255 &&
+        data.fetchedAt is number &&
+        data.fetchedAt > 0;
+    }
+
     match /trips/{tripId} {
       // Public read so viewers can open invite links without auth.
       allow read: if true;
@@ -148,6 +172,12 @@ service cloud.firestore {
       match /myTrips/{tripId} {
         allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
       }
+    }
+
+    match /linkPreviews/{previewId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidLinkPreviewPayload(request.resource.data);
+      allow delete: if false;
     }
   }
 }
