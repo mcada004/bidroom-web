@@ -39,10 +39,13 @@ type Member = {
   role: "manager" | "participant";
 };
 
+type PricingMode = "equalSplit" | "zero" | "preset" | "firstBid";
+
 type Trip = {
   name: string;
   status: "draft" | "live" | "ended";
   inviteCode: string;
+  pricingMode?: PricingMode;
   listingUrl?: string | null;
   listingTitle?: string | null;
   listingImageUrl?: string | null;
@@ -77,6 +80,16 @@ function formatTime(ms: number) {
 function formatListingCount(value: number | null | undefined, singularLabel: string) {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   return `${value} ${singularLabel}${value === 1 ? "" : "s"}`;
+}
+
+function minIncrementFor(currentHighBidAmount: number) {
+  return Math.max(20, Math.ceil(currentHighBidAmount * 0.1));
+}
+
+function minAllowedForRoom(room: Room) {
+  const current = Number(room.currentHighBidAmount ?? 0);
+  const starting = Number(room.startingPrice ?? 0);
+  return current === 0 ? starting : current + minIncrementFor(current);
 }
 
 type FirestoreLikeError = {
@@ -145,6 +158,7 @@ export default function TripPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null);
+  const [bidInputs, setBidInputs] = useState<Record<string, string>>({});
   const [busyAdmin, setBusyAdmin] = useState(false);
   const [bidActionError, setBidActionError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
@@ -184,6 +198,31 @@ export default function TripPage() {
     const timer = window.setTimeout(() => setCopyState("idle"), 1500);
     return () => window.clearTimeout(timer);
   }, [copyState]);
+
+  useEffect(() => {
+    if (rooms.length === 0) {
+      setBidInputs((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
+    setBidInputs((prev) => {
+      const next: Record<string, string> = {};
+      let changed = false;
+
+      for (const room of rooms) {
+        const minAllowed = minAllowedForRoom(room);
+        const priorRaw = prev[room.id];
+        const parsedPrior = Number(priorRaw);
+        const keepPrior = typeof priorRaw === "string" && priorRaw.trim() !== "" && Number.isFinite(parsedPrior) && parsedPrior >= minAllowed;
+        const nextValue = keepPrior ? priorRaw : String(minAllowed);
+        next[room.id] = nextValue;
+        if (nextValue !== priorRaw) changed = true;
+      }
+
+      if (!changed && Object.keys(prev).length !== rooms.length) changed = true;
+      return changed ? next : prev;
+    });
+  }, [rooms]);
 
   const isManager = useMemo(() => !!(user && trip && user.uid === trip.createdByUid), [user, trip]);
 
@@ -487,8 +526,19 @@ export default function TripPage() {
   }
 
   // ---------- Bidding ----------
-  async function placeBid(room: Room) {
+  async function placeBid(room: Room, typedBidInput: string) {
     if (!trip) return;
+
+    const parsedTypedBid = Number(typedBidInput);
+    if (!Number.isFinite(parsedTypedBid) || !Number.isInteger(parsedTypedBid)) {
+      setBidActionError("Bid amount must be a whole-dollar number.");
+      return;
+    }
+    if (parsedTypedBid < 0) {
+      setBidActionError("Bid amount must be $0 or greater.");
+      return;
+    }
+    const typedBid = parsedTypedBid;
 
     const authUser = auth.currentUser;
     debugBidLog("bid_auth_check", {
@@ -496,8 +546,10 @@ export default function TripPage() {
       hasCurrentUser: !!authUser,
     });
     const uid = authUser?.uid;
-    const optimisticAmount =
-      (room.currentHighBidAmount || 0) === 0 ? Math.max(room.startingPrice || 0, 1) : (room.currentHighBidAmount || 0) + trip.bidIncrement;
+    const optimisticCurrent = Number(room.currentHighBidAmount ?? 0);
+    const optimisticMinIncrement = minIncrementFor(optimisticCurrent);
+    const optimisticMinAllowed = optimisticCurrent === 0 ? Number(room.startingPrice ?? 0) : optimisticCurrent + optimisticMinIncrement;
+    const optimisticMaxAllowed = maxAllowedForRoom(room.id);
     const localEndRaw = trip.auctionEndAt ?? null;
     const localEndMs =
       localEndRaw && typeof localEndRaw.toMillis === "function"
@@ -510,7 +562,7 @@ export default function TripPage() {
       uid: uid ?? null,
       tripId,
       roomId: room.id,
-      amount: optimisticAmount,
+      amount: typedBid,
     });
     debugBidLog("bid_rule_snapshot_pre_tx", {
       authUid: uid ?? null,
@@ -518,10 +570,12 @@ export default function TripPage() {
       tripAuctionEndAtRaw: localEndRaw,
       tripAuctionEndAtMs: localEndMs,
       auctionLiveNow: localAuctionLiveNow,
-      roomCurrentHighBidAmount: room.currentHighBidAmount ?? 0,
+      roomCurrentHighBidAmount: optimisticCurrent,
       roomStartingPrice: room.startingPrice ?? 0,
-      computedNextBid: optimisticAmount,
-      nextBidGtCurrent: optimisticAmount > (room.currentHighBidAmount ?? 0),
+      computedMinIncrement: optimisticMinIncrement,
+      computedMinAllowed: optimisticMinAllowed,
+      typedBid,
+      bidGtCurrent: typedBid > optimisticCurrent,
     });
 
     if (!uid) {
@@ -532,6 +586,18 @@ export default function TripPage() {
 
     if (trip.status !== "live") return alert("Auction is not live yet.");
     if (endAtMs && nowMs >= endAtMs) return alert("Auction has ended.");
+    if (typedBid < optimisticMinAllowed) {
+      setBidActionError(`Bid must be at least $${optimisticMinAllowed}.`);
+      return;
+    }
+    if (typedBid > optimisticMaxAllowed) {
+      setBidActionError(`Bid too high. Max allowed for this room is $${optimisticMaxAllowed}.`);
+      return;
+    }
+    if (typedBid > trip.totalPrice) {
+      setBidActionError("Bid cannot exceed total trip price.");
+      return;
+    }
 
     setBusyRoomId(room.id);
     const tripRefPath = `trips/${tripId}`;
@@ -546,13 +612,13 @@ export default function TripPage() {
       tripPath: tripRefPath,
       roomPath: roomRefPath,
       bidPayload: {
-        amount: optimisticAmount,
+        amount: typedBid,
         bidderUid: uid,
         bidTimeMs: bidTimeMsPreview,
         createdAt: createdAtPreview,
       },
       roomPayload: {
-        currentHighBidAmount: optimisticAmount,
+        currentHighBidAmount: typedBid,
         currentHighBidderUid: uid,
         currentHighBidAt: currentHighBidAtPreview,
         currentHighBidTimeMs: bidTimeMsPreview,
@@ -565,7 +631,7 @@ export default function TripPage() {
     let pendingAntiSnipeEndAt: Date | null = null;
     let failureTripStatus: string = trip.status;
     let failureCurrentBid = room.currentHighBidAmount ?? 0;
-    let failureNextBid = optimisticAmount;
+    let failureAttemptedBid = typedBid;
     let failureAuctionEnded = !!(endAtMs && nowMs >= endAtMs);
 
     try {
@@ -582,22 +648,22 @@ export default function TripPage() {
         const txNowMs = Date.now();
 
         const totalPrice = Number(t.totalPrice ?? 0);
-        const bidIncrement = Number(t.bidIncrement ?? 20);
         const current = Number(r.currentHighBidAmount ?? 0);
         const starting = Number(r.startingPrice ?? 0);
-        const nextBid = current === 0 ? Math.max(starting, 1) : current + bidIncrement;
+        const minAllowed = current === 0 ? starting : current + minIncrementFor(current);
         const txEndRaw = t.auctionEndAt ?? null;
         const txEndMs = txEndRaw && typeof txEndRaw.toMillis === "function" ? txEndRaw.toMillis() : null;
 
         failureTripStatus = String(t.status ?? "unknown");
         failureCurrentBid = current;
-        failureNextBid = nextBid;
+        failureAttemptedBid = typedBid;
         failureAuctionEnded = txEndMs !== null ? txNowMs > txEndMs : false;
 
         const sumOther = rooms.reduce((sum, rr) => (rr.id === room.id ? sum : sum + (rr.currentHighBidAmount || 0)), 0);
         const maxAllowed = Math.max(0, totalPrice - sumOther);
-        if (nextBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
-        if (nextBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
+        if (typedBid < minAllowed) throw new Error(`Bid must be at least $${minAllowed}.`);
+        if (typedBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
+        if (typedBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
 
         const bidTimeMs = Date.now();
         const bidRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
@@ -605,9 +671,9 @@ export default function TripPage() {
         const createdAtTs = Timestamp.now();
         const currentHighBidAtTs = Timestamp.now();
 
-        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
+        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
         const roomUpdatePayload = {
-          currentHighBidAmount: nextBid,
+          currentHighBidAmount: typedBid,
           currentHighBidderUid: uid,
           currentHighBidAt: currentHighBidAtTs,
           currentHighBidTimeMs: bidTimeMs,
@@ -652,7 +718,6 @@ export default function TripPage() {
         const txNowMs = Date.now();
 
         const totalPrice = Number(t.totalPrice ?? 0);
-        const bidIncrement = Number(t.bidIncrement ?? 20);
         const antiExt = Number(t.antiSnipeExtendMinutes ?? 10);
         const txEndRaw = t.auctionEndAt ?? null;
         const txEndMs = txEndRaw && typeof txEndRaw.toMillis === "function" ? txEndRaw.toMillis() : null;
@@ -660,11 +725,12 @@ export default function TripPage() {
 
         const current = Number(r.currentHighBidAmount ?? 0);
         const starting = Number(r.startingPrice ?? 0);
-        const nextBid = current === 0 ? Math.max(starting, 1) : current + bidIncrement;
+        const minIncrement = minIncrementFor(current);
+        const minAllowed = current === 0 ? starting : current + minIncrement;
 
         failureTripStatus = String(t.status ?? "unknown");
         failureCurrentBid = current;
-        failureNextBid = nextBid;
+        failureAttemptedBid = typedBid;
         failureAuctionEnded = txEndMs !== null ? txNowMs > txEndMs : false;
 
         debugBidLog("bid_rule_snapshot_tx", {
@@ -675,15 +741,18 @@ export default function TripPage() {
           auctionLiveNow: txAuctionLiveNow,
           roomCurrentHighBidAmount: current,
           roomStartingPrice: starting,
-          computedNextBid: nextBid,
-          nextBidGtCurrent: nextBid > current,
+          computedMinIncrement: minIncrement,
+          computedMinAllowed: minAllowed,
+          typedBid,
+          bidGtCurrent: typedBid > current,
         });
 
         const sumOther = rooms.reduce((sum, rr) => (rr.id === room.id ? sum : sum + (rr.currentHighBidAmount || 0)), 0);
         const maxAllowed = Math.max(0, totalPrice - sumOther);
 
-        if (nextBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
-        if (nextBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
+        if (typedBid < minAllowed) throw new Error(`Bid must be at least $${minAllowed}.`);
+        if (typedBid > totalPrice) throw new Error("Bid cannot exceed total trip price.");
+        if (typedBid > maxAllowed) throw new Error(`Bid too high. Max allowed for this room is $${maxAllowed}.`);
 
         const bidTimeMs = Date.now();
         const createdAtTs = Timestamp.now();
@@ -692,9 +761,13 @@ export default function TripPage() {
         // tie-break earliest wins
         const existingAmt = Number(r.currentHighBidAmount ?? 0);
         const existingTime = typeof r.currentHighBidTimeMs === "number" ? r.currentHighBidTimeMs : null;
+        const existingBidderUid = typeof r.currentHighBidderUid === "string" ? r.currentHighBidderUid : null;
+        const isInitialZeroState = existingAmt === 0 && !existingBidderUid;
         const isBetter =
-          nextBid > existingAmt || (nextBid === existingAmt && existingTime !== null && bidTimeMs < existingTime);
-        if (!isBetter && nextBid === existingAmt) throw new Error("Tie bid lost (earlier bid wins).");
+          typedBid > existingAmt ||
+          (typedBid === existingAmt &&
+            ((existingTime !== null && bidTimeMs < existingTime) || isInitialZeroState));
+        if (!isBetter && typedBid === existingAmt) throw new Error("Tie bid lost (earlier bid wins).");
 
         const bidRef = doc(collection(db, "trips", tripId, "rooms", room.id, "bids"));
         bidRefPath = bidRef.path;
@@ -704,18 +777,18 @@ export default function TripPage() {
           bidPath: bidRefPath,
         });
         debugBidLog("bid_payload_core", {
-          amount: nextBid,
+          amount: typedBid,
           bidderUid: uid,
           bidTimeMs,
         });
 
-        const bidCreatePayload = { amount: nextBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
+        const bidCreatePayload = { amount: typedBid, bidderUid: uid, bidTimeMs, createdAt: createdAtTs };
         debugBidLog("bid_create_payload", bidCreatePayload);
         txStage = "write_bid_doc";
         tx.set(bidRef, bidCreatePayload);
 
         const roomUpdatePayload = {
-          currentHighBidAmount: nextBid,
+          currentHighBidAmount: typedBid,
           currentHighBidderUid: uid,
           currentHighBidAt: currentHighBidAtTs,
           currentHighBidTimeMs: bidTimeMs,
@@ -780,7 +853,7 @@ export default function TripPage() {
         message: parsed.message,
         details: parsed.details,
       });
-      const bidFailureContext = `stage=${txStage} uid=${uid} tripStatus=${failureTripStatus} nextBid=${failureNextBid} currentBid=${failureCurrentBid} auctionEnded=${failureAuctionEnded}`;
+      const bidFailureContext = `stage=${txStage} uid=${uid} tripStatus=${failureTripStatus} attemptedBid=${failureAttemptedBid} currentBid=${failureCurrentBid} auctionEnded=${failureAuctionEnded}`;
       debugBidLog("bid_failure_context", { bidFailureContext });
       const bidFailureMessage = `Bid failed [${parsed.code}] at ${txStage}: ${parsed.message}. ${bidFailureContext}`;
       setBidActionError(bidFailureMessage);
@@ -974,11 +1047,19 @@ export default function TripPage() {
             {rooms.map((r) => {
               const maxAllowed = maxAllowedForRoom(r.id);
               const current = r.currentHighBidAmount || 0;
-              const nextBid = current === 0 ? r.startingPrice : current + trip.bidIncrement;
+              const minNextBid = minAllowedForRoom(r);
+              const minIncrement = minIncrementFor(current);
+              const bidValue = bidInputs[r.id] ?? String(minNextBid);
+              const bidInputMax = Math.min(maxAllowed, trip.totalPrice);
 
               const highBidderName = leadingBidderLabel(r.currentHighBidderUid);
 
-              const canBid = !!authReadyUser && trip.status === "live" && (endAtMs ? nowMs < endAtMs : true) && nextBid <= maxAllowed;
+              const canBid =
+                !!authReadyUser &&
+                trip.status === "live" &&
+                (endAtMs ? nowMs < endAtMs : true) &&
+                minNextBid <= maxAllowed &&
+                minNextBid <= trip.totalPrice;
 
               return (
                 <li key={r.id} className="list-item">
@@ -988,21 +1069,48 @@ export default function TripPage() {
                   </div>
 
                   <div className="muted" style={{ marginTop: 6 }}>
-                    Starting ${r.startingPrice} • Current <strong>${current}</strong>
+                    Current high bid: <strong>${current}</strong>
                     {highBidderName ? <span> — leading: {highBidderName}</span> : null}
                   </div>
 
-                  <div className="muted">Max allowed right now: <strong>${maxAllowed}</strong></div>
+                  <div className="muted">Min next bid: <strong>${minNextBid}</strong></div>
+                  <div className="muted">Max allowed for this room right now: <strong>${maxAllowed}</strong></div>
+                  {current > 0 ? (
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      Minimum increment right now: <strong>${minIncrement}</strong>
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      Starting price: <strong>${r.startingPrice}</strong>
+                    </div>
+                  )}
 
                   {trip.status !== "ended" ? (
-                    <button
-                      className="button"
-                      style={{ marginTop: 10 }}
-                      disabled={!authReadyUser || !canBid || busyRoomId === r.id}
-                      onClick={() => placeBid(r)}
-                    >
-                      {busyRoomId === r.id ? "Bidding…" : `Bid $${nextBid}`}
-                    </button>
+                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                      <label className="label" style={{ margin: 0 }}>
+                        Bid amount ($)
+                        <input
+                          className="input"
+                          type="number"
+                          min={minNextBid}
+                          max={bidInputMax}
+                          step={1}
+                          value={bidValue}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+                            setBidInputs((prev) => ({ ...prev, [r.id]: nextValue }));
+                          }}
+                          disabled={!authReadyUser || trip.status !== "live" || (endAtMs ? nowMs >= endAtMs : false) || busyRoomId === r.id}
+                        />
+                      </label>
+                      <button
+                        className="button"
+                        disabled={!authReadyUser || !canBid || busyRoomId === r.id}
+                        onClick={() => placeBid(r, bidValue)}
+                      >
+                        {busyRoomId === r.id ? "Bidding…" : "Place bid"}
+                      </button>
+                    </div>
                   ) : (
                     <div style={{ marginTop: 10 }}>
                       Winner: <strong>{leadingBidderLabel(r.winnerUid ?? null) ?? "No winner"}</strong>

@@ -83,7 +83,12 @@ service cloud.firestore {
           request.resource.data.currentHighBidAmount is number &&
           (
             !(resource.data.currentHighBidAmount is number) ||
-            request.resource.data.currentHighBidAmount > resource.data.currentHighBidAmount
+            request.resource.data.currentHighBidAmount > resource.data.currentHighBidAmount ||
+            (
+              resource.data.currentHighBidAmount == 0 &&
+              request.resource.data.currentHighBidAmount == 0 &&
+              !(resource.data.currentHighBidderUid is string)
+            )
           ) &&
           request.resource.data.currentHighBidTimeMs is number &&
           (

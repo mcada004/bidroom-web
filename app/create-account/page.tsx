@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { FirebaseError } from "firebase/app";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
@@ -46,6 +46,7 @@ function validateSignUpForm(values: {
 
 export default function CreateAccountPage() {
   const router = useRouter();
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,6 +74,12 @@ export default function CreateAccountPage() {
     });
 
     setErrors(nextErrors);
+    if (nextErrors.confirmPassword) {
+      window.alert("Passwords don't match. Please re-enter.");
+      confirmPasswordRef.current?.focus();
+      return;
+    }
+
     if (Object.keys(nextErrors).length > 0) {
       return;
     }
@@ -171,6 +178,7 @@ export default function CreateAccountPage() {
               onChange={(event) => {
                 setPassword(event.target.value);
                 clearFieldError("password");
+                clearFieldError("confirmPassword");
               }}
               autoComplete="new-password"
               type="password"
@@ -182,6 +190,7 @@ export default function CreateAccountPage() {
           <label className="label">
             Confirm password
             <input
+              ref={confirmPasswordRef}
               className="input"
               value={confirmPassword}
               onChange={(event) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -27,6 +27,8 @@ type FirestoreLikeError = {
   message?: string;
 };
 
+type PricingMode = "equalSplit" | "zero" | "preset" | "firstBid";
+
 function extractFirestoreError(err: unknown) {
   const asObj = (err ?? {}) as FirestoreLikeError;
   return {
@@ -43,10 +45,29 @@ export default function CreateTripPage() {
   const [listingUrl, setListingUrl] = useState("");
   const [totalPrice, setTotalPrice] = useState<number>(2000);
   const [roomCount, setRoomCount] = useState<number>(4);
+  const [pricingMode, setPricingMode] = useState<PricingMode>("equalSplit");
+  const [presetStartingPrices, setPresetStartingPrices] = useState<number[]>(() =>
+    Array.from({ length: 4 }, () => 0)
+  );
   const [durationHours, setDurationHours] = useState<number>(24);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const count = Math.max(1, Number(roomCount) || 1);
+    setPresetStartingPrices((prev) => {
+      const next = Array.from({ length: count }, (_, index) => {
+        const raw = Number(prev[index] ?? 0);
+        if (!Number.isFinite(raw) || raw < 0) return 0;
+        return Math.round(raw);
+      });
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [roomCount]);
 
   function parseListingUrlOrNull(raw: string) {
     const trimmed = raw.trim();
@@ -109,12 +130,32 @@ export default function CreateTripPage() {
     }
 
     const inviteCode = makeInviteCode(6);
-    const startingPricePerRoom = Math.ceil(P / N);
+    const equalSplitStartingPrice = Math.round(P / N);
+    const presetValues = Array.from({ length: N }, (_, index) => {
+      const raw = Number(presetStartingPrices[index] ?? 0);
+      return Number.isFinite(raw) ? Math.round(raw) : 0;
+    });
+    if (pricingMode === "preset") {
+      const invalidIndex = presetValues.findIndex((value) => value < 0);
+      if (invalidIndex >= 0) {
+        setBusy(false);
+        setError(`Room ${invalidIndex + 1} preset must be 0 or greater`);
+        return;
+      }
+    }
+    const roomStartingPrices = Array.from({ length: N }, (_, index) => {
+      if (pricingMode === "zero") return 0;
+      if (pricingMode === "firstBid") return 0;
+      if (pricingMode === "preset") return presetValues[index] ?? 0;
+      return equalSplitStartingPrice;
+    });
+    const startingPricePerRoom = equalSplitStartingPrice;
     const normalizedTripName = tripName.trim() || "New Trip";
     const payload = {
       name: normalizedTripName,
       status: "draft",
       inviteCode,
+      pricingMode,
       listingTitle: null,
       listingImageUrl: null,
       listingBedrooms: null,
@@ -201,7 +242,7 @@ export default function CreateTripPage() {
           description: "",
           createdAt: serverTimestamp(),
 
-          startingPrice: startingPricePerRoom, // first bid must be >= this
+          startingPrice: roomStartingPrices[i - 1] ?? 0, // first bid must be >= this
           currentHighBidAmount: 0,
           currentHighBidderUid: null,
           currentHighBidAt: null,
@@ -242,7 +283,18 @@ export default function CreateTripPage() {
   if (loading) return <main className="page">Loading…</main>;
   if (!user) return <main className="page">Please sign in.</main>;
 
-  const startingPrice = Math.ceil((totalPrice || 0) / Math.max(1, roomCount || 1));
+  const safeRoomCount = Math.max(1, Number(roomCount) || 1);
+  const equalSplitStartingPrice = Math.round((Number(totalPrice) || 0) / safeRoomCount);
+  const roomStartingPreview = Array.from({ length: safeRoomCount }, (_, index) => {
+    if (pricingMode === "zero") return 0;
+    if (pricingMode === "firstBid") return 0;
+    if (pricingMode === "preset") {
+      const raw = Number(presetStartingPrices[index] ?? 0);
+      if (!Number.isFinite(raw) || raw < 0) return 0;
+      return Math.round(raw);
+    }
+    return equalSplitStartingPrice;
+  });
 
   return (
     <main className="page">
@@ -295,6 +347,45 @@ export default function CreateTripPage() {
           </label>
 
           <label className="label">
+            Pricing mode
+            <select
+              className="input"
+              value={pricingMode}
+              onChange={(e) => setPricingMode(e.target.value as PricingMode)}
+            >
+              <option value="equalSplit">Equal split (default)</option>
+              <option value="zero">Set all to 0</option>
+              <option value="preset">Preset per-room starting prices</option>
+              <option value="firstBid">Prices based off first bid</option>
+            </select>
+          </label>
+
+          {pricingMode === "preset" ? (
+            <div className="stack" style={{ gap: 10 }}>
+              {Array.from({ length: safeRoomCount }).map((_, index) => (
+                <label className="label" key={`preset-room-${index + 1}`}>
+                  Room {index + 1} starting price ($)
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={presetStartingPrices[index] ?? 0}
+                    onChange={(e) => {
+                      const nextValue = Number(e.target.value);
+                      setPresetStartingPrices((prev) => {
+                        const next = [...prev];
+                        next[index] = Number.isFinite(nextValue) ? nextValue : 0;
+                        return next;
+                      });
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          ) : null}
+
+          <label className="label">
             Auction duration (hours)
             <input
               className="input"
@@ -306,7 +397,17 @@ export default function CreateTripPage() {
           </label>
 
           <div className="notice">
-            Starting price per room (auto): <strong>${startingPrice}</strong>
+            {pricingMode === "preset" ? (
+              <>
+                Preset room starting prices:{" "}
+                <strong>{roomStartingPreview.map((value) => `$${value}`).join(", ")}</strong>
+              </>
+            ) : (
+              <>
+                Starting price per room:{" "}
+                <strong>${roomStartingPreview[0] ?? 0}</strong>
+              </>
+            )}
           </div>
 
           <div className="row">
