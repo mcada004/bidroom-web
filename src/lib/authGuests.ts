@@ -6,9 +6,27 @@ export function normalizeDisplayName(input: string) {
   return cleaned;
 }
 
-export function getPreferredDisplayName(user: User | null) {
-  if (!user) return "Participant";
+function emailPrefixToName(email: string | null | undefined) {
+  if (!email) return null;
+  const prefix = email.split("@")[0] ?? "";
+  const spaced = prefix.replace(/[._-]+/g, " ").trim();
+  if (!spaced) return null;
 
+  if (spaced.length <= 24) {
+    return normalizeDisplayName(spaced);
+  }
+
+  return normalizeDisplayName(spaced.slice(0, 24));
+}
+
+export function getPreferredDisplayName(user: User | null, userDocDisplayName?: string | null) {
+  if (!user) return "Participant";
+  if (user.isAnonymous) return "Participant";
+
+  const fromUserDoc = normalizeDisplayName(userDocDisplayName ?? "");
+  if (fromUserDoc) return fromUserDoc;
   const fromProfile = normalizeDisplayName(user.displayName ?? "");
-  return fromProfile ?? "Participant";
+  if (fromProfile) return fromProfile;
+
+  return emailPrefixToName(user.email) ?? "Participant";
 }

@@ -13,7 +13,6 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
-import { getPreferredDisplayName } from "@/src/lib/authGuests";
 
 function makeInviteCode(length = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -39,7 +38,7 @@ function extractFirestoreError(err: unknown) {
 
 export default function CreateTripPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, preferredDisplayName } = useAuth();
 
   const [tripName, setTripName] = useState("New Trip");
   const [listingUrl, setListingUrl] = useState("");
@@ -222,7 +221,7 @@ export default function CreateTripPage() {
     // STEP 2: create creator membership after trip doc exists.
     try {
       await setDoc(doc(db, "trips", tripId, "members", writeUser.uid), {
-        displayName: getPreferredDisplayName(writeUser),
+        displayName: writeUser.isAnonymous ? "Participant" : preferredDisplayName,
         role: "manager",
         joinedAt: serverTimestamp(),
       });

@@ -36,6 +36,36 @@ service cloud.firestore {
         (data.listingUrl is string && data.listingUrl.matches('^https?://.+'));
     }
 
+    function hasAllowedManagerTripUpdate(before, after) {
+      return hasValidListingUrl(after) &&
+        after.diff(before).changedKeys().hasOnly([
+          "name",
+          "listingUrl",
+          "listingTitle",
+          "listingImageUrl",
+          "listingDescription",
+          "listingSiteName",
+          "totalPrice",
+          "roomCount",
+          "auctionDurationHours",
+          "bidIncrement",
+          "antiSnipeWindowMinutes",
+          "antiSnipeExtendMinutes",
+          "status",
+          "auctionStartAt",
+          "auctionEndAt",
+          "updatedAt"
+        ]) &&
+        (!after.keys().hasAny(["name"]) || (after.name is string && after.name.size() > 0 && after.name.size() <= 120)) &&
+        (!after.keys().hasAny(["totalPrice"]) || (after.totalPrice is number && after.totalPrice > 0)) &&
+        (!after.keys().hasAny(["roomCount"]) || (after.roomCount is number && after.roomCount >= 1)) &&
+        (!after.keys().hasAny(["auctionDurationHours"]) || (after.auctionDurationHours is number && after.auctionDurationHours >= 1)) &&
+        (!after.keys().hasAny(["bidIncrement"]) || (after.bidIncrement is number && after.bidIncrement >= 1)) &&
+        (!after.keys().hasAny(["antiSnipeWindowMinutes"]) || (after.antiSnipeWindowMinutes is number && after.antiSnipeWindowMinutes >= 0)) &&
+        (!after.keys().hasAny(["antiSnipeExtendMinutes"]) || (after.antiSnipeExtendMinutes is number && after.antiSnipeExtendMinutes >= 0)) &&
+        (!after.keys().hasAny(["status"]) || (after.status == "draft" || after.status == "live" || after.status == "ended"));
+    }
+
     function isValidLinkPreviewPayload(data) {
       return data.keys().hasOnly([
           "url",
@@ -71,7 +101,7 @@ service cloud.firestore {
 
       // Manager-only trip lifecycle/settings updates.
       // Also allow signed-in bidders to extend only auctionEndAt (anti-sniping).
-      allow update: if (isTripManager(tripId) && hasValidListingUrl(request.resource.data)) || (
+      allow update: if (isTripManager(tripId) && hasAllowedManagerTripUpdate(resource.data, request.resource.data)) || (
         isSignedIn() &&
         resource.data.status == "live" &&
         resource.data.auctionEndAt is timestamp &&
@@ -158,19 +188,13 @@ service cloud.firestore {
       }
     }
 
-    match /users/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow create, update: if isSignedIn() &&
-        request.auth.uid == userId &&
-        request.resource.data.firstName is string &&
-        request.resource.data.firstName.size() >= 1 &&
-        request.resource.data.email is string &&
-        request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$') &&
-        request.resource.data.createdAt is timestamp;
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
       allow delete: if false;
 
       match /myTrips/{tripId} {
-        allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+        allow read, create, update, delete: if isSignedIn() && request.auth.uid == uid;
       }
     }
 

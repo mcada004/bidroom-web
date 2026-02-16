@@ -98,9 +98,9 @@ export default function CreateAccountPage() {
       await setDoc(
         doc(db, "users", credential.user.uid),
         {
-          firstName: trimmedFirstName,
+          displayName: trimmedFirstName,
           email: trimmedEmail,
-          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         },
         { merge: true }
       );

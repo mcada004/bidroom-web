@@ -42,7 +42,7 @@ export default function ResultsPage() {
   const tripId = params.tripId;
   const code = searchParams.get("code") ?? "";
 
-  const { user, loading } = useAuth();
+  const { user, loading, preferredDisplayName } = useAuth();
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -134,7 +134,9 @@ export default function ResultsPage() {
 
   function participantLabel(uid: string | null) {
     if (!uid) return null;
-    return memberName[uid] ?? "Participant";
+    if (memberName[uid]) return memberName[uid];
+    if (uid === user?.uid) return preferredDisplayName;
+    return "Unknown member";
   }
 
   // Live leaders per room (during live auction)

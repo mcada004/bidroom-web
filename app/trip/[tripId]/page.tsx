@@ -17,7 +17,6 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
-import { getPreferredDisplayName } from "@/src/lib/authGuests";
 
 type Room = {
   id: string;
@@ -152,7 +151,7 @@ export default function TripPage() {
   const tripId = params.tripId;
   const inviteCode = useMemo(() => searchParams.get("code") ?? "", [searchParams]);
 
-  const { user, loading } = useAuth();
+  const { user, loading, preferredDisplayName } = useAuth();
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -251,7 +250,9 @@ export default function TripPage() {
 
   function leadingBidderLabel(uid: string | null) {
     if (!uid) return null;
-    return memberNameByUid[uid] ?? "(signed-in user)";
+    if (memberNameByUid[uid]) return memberNameByUid[uid];
+    if (user?.uid === uid) return preferredDisplayName;
+    return "Unknown member";
   }
 
   function maxAllowedForRoom(roomId: string) {
@@ -286,7 +287,7 @@ export default function TripPage() {
 
       // join
       if (user) {
-        const displayName = getPreferredDisplayName(user);
+        const displayName = user.isAnonymous ? "Participant" : preferredDisplayName;
         await setDoc(
           doc(db, "trips", tripId, "members", user.uid),
           {
@@ -371,7 +372,7 @@ export default function TripPage() {
       if (unsubRooms) unsubRooms();
       if (unsubMembers) unsubMembers();
     };
-  }, [tripId, inviteCode, user, loading]);
+  }, [tripId, inviteCode, user, loading, preferredDisplayName]);
 
   // ---------- Admin helpers (core) ----------
   async function startAuctionCore() {
@@ -1152,9 +1153,16 @@ export default function TripPage() {
 
       <div className="section row" style={{ justifyContent: "space-between" }}>
         <span className="muted">Need the final breakdown?</span>
-        <a className="button secondary" href={`/trip/${tripId}/results?code=${trip.inviteCode}`}>
-          View results
-        </a>
+        <div className="row">
+          {isManager ? (
+            <a className="button ghost" href={`/trip/${tripId}/settings?code=${encodeURIComponent(trip.inviteCode)}`}>
+              Trip settings
+            </a>
+          ) : null}
+          <a className="button secondary" href={`/trip/${tripId}/results?code=${trip.inviteCode}`}>
+            View results
+          </a>
+        </div>
       </div>
     </main>
   );
