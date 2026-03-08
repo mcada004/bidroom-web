@@ -10,6 +10,7 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   OAuthProvider,
+  getAdditionalUserInfo,
 } from "firebase/auth";
 import { auth } from "@/src/lib/firebase";
 
@@ -61,6 +62,31 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     }
   }
 
+  function logAuthDebug(step: string, details?: Record<string, unknown>) {
+    console.log(`[auth-debug] ${step}`, details ?? {});
+  }
+
+  function logAuthError(step: string, error: unknown) {
+    if (error instanceof FirebaseError) {
+      console.error(`[auth-debug] ${step}`, {
+        code: error.code,
+        message: error.message,
+        customData: error.customData,
+      });
+      return;
+    }
+
+    if (error instanceof Error) {
+      console.error(`[auth-debug] ${step}`, {
+        message: error.message,
+        name: error.name,
+      });
+      return;
+    }
+
+    console.error(`[auth-debug] ${step}`, { error });
+  }
+
   async function handleSignIn() {
     setError(null);
     setBusy(true);
@@ -78,11 +104,23 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     setError(null);
     setAppleHint(false);
     setBusy(true);
+    logAuthDebug("google_button_clicked", { nextPath });
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      logAuthDebug("google_provider_created", { providerId: provider.providerId });
+      logAuthDebug("google_sign_in_started", { method: "signInWithPopup" });
+      const result = await signInWithPopup(auth, provider);
+      const info = getAdditionalUserInfo(result);
+      logAuthDebug("google_sign_in_success", {
+        operationType: result.operationType,
+        providerId: info?.providerId ?? provider.providerId,
+        isNewUser: info?.isNewUser ?? null,
+        uid: result.user.uid,
+        email: result.user.email,
+      });
       goToNext();
     } catch (e: unknown) {
+      logAuthError("google_sign_in_failed", e);
       setError(getErrorMessage(e, "Google sign in failed"));
     } finally {
       setBusy(false);
@@ -93,11 +131,23 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     setError(null);
     setAppleHint(false);
     setBusy(true);
+    logAuthDebug("apple_button_clicked", { nextPath });
     try {
       const provider = new OAuthProvider("apple.com");
-      await signInWithPopup(auth, provider);
+      logAuthDebug("apple_provider_created", { providerId: provider.providerId });
+      logAuthDebug("apple_sign_in_started", { method: "signInWithPopup" });
+      const result = await signInWithPopup(auth, provider);
+      const info = getAdditionalUserInfo(result);
+      logAuthDebug("apple_sign_in_success", {
+        operationType: result.operationType,
+        providerId: info?.providerId ?? provider.providerId,
+        isNewUser: info?.isNewUser ?? null,
+        uid: result.user.uid,
+        email: result.user.email,
+      });
       goToNext();
     } catch (e: unknown) {
+      logAuthError("apple_sign_in_failed", e);
       setAppleHint(true);
       setError(getErrorMessage(e, "Apple sign in failed"));
     } finally {
