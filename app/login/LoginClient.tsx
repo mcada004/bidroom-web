@@ -62,13 +62,30 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     }
   }
 
-  function logAuthDebug(step: string, details?: Record<string, unknown>) {
-    console.log(`[auth-debug] ${step}`, details ?? {});
+  function getGoogleErrorMessage(error: unknown) {
+    if (error instanceof FirebaseError) {
+      switch (error.code) {
+        case "auth/popup-blocked":
+          return "The Google sign-in popup was blocked by the browser. Allow popups and try again.";
+        case "auth/popup-closed-by-user":
+          return "The Google sign-in popup was closed before finishing. Please try again.";
+        case "auth/network-request-failed":
+          return "Network error during Google sign-in. Check your connection and try again.";
+        case "auth/unauthorized-domain":
+          return "This domain is not allowed for Google sign-in in Firebase yet.";
+        case "auth/operation-not-allowed":
+          return "Google sign-in is not enabled in Firebase Auth yet.";
+        default:
+          return error.message || "Google sign in failed";
+      }
+    }
+
+    return "Google sign in failed";
   }
 
-  function logAuthError(step: string, error: unknown) {
+  function logGoogleError(error: unknown) {
     if (error instanceof FirebaseError) {
-      console.error(`[auth-debug] ${step}`, {
+      console.error("[google-sign-in] failed", {
         code: error.code,
         message: error.message,
         customData: error.customData,
@@ -77,14 +94,14 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     }
 
     if (error instanceof Error) {
-      console.error(`[auth-debug] ${step}`, {
+      console.error("[google-sign-in] failed", {
         message: error.message,
         name: error.name,
       });
       return;
     }
 
-    console.error(`[auth-debug] ${step}`, { error });
+    console.error("[google-sign-in] failed", { error });
   }
 
   async function handleSignIn() {
@@ -104,14 +121,17 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     setError(null);
     setAppleHint(false);
     setBusy(true);
-    logAuthDebug("google_button_clicked", { nextPath });
+    console.log("[google-sign-in] button clicked", { nextPath });
     try {
       const provider = new GoogleAuthProvider();
-      logAuthDebug("google_provider_created", { providerId: provider.providerId });
-      logAuthDebug("google_sign_in_started", { method: "signInWithPopup" });
+      provider.setCustomParameters({ prompt: "select_account" });
+      console.log("[google-sign-in] popup start", {
+        method: "signInWithPopup",
+        providerId: provider.providerId,
+      });
       const result = await signInWithPopup(auth, provider);
       const info = getAdditionalUserInfo(result);
-      logAuthDebug("google_sign_in_success", {
+      console.log("[google-sign-in] success", {
         operationType: result.operationType,
         providerId: info?.providerId ?? provider.providerId,
         isNewUser: info?.isNewUser ?? null,
@@ -120,8 +140,8 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
       });
       goToNext();
     } catch (e: unknown) {
-      logAuthError("google_sign_in_failed", e);
-      setError(getErrorMessage(e, "Google sign in failed"));
+      logGoogleError(e);
+      setError(getGoogleErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -131,23 +151,11 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     setError(null);
     setAppleHint(false);
     setBusy(true);
-    logAuthDebug("apple_button_clicked", { nextPath });
     try {
       const provider = new OAuthProvider("apple.com");
-      logAuthDebug("apple_provider_created", { providerId: provider.providerId });
-      logAuthDebug("apple_sign_in_started", { method: "signInWithPopup" });
-      const result = await signInWithPopup(auth, provider);
-      const info = getAdditionalUserInfo(result);
-      logAuthDebug("apple_sign_in_success", {
-        operationType: result.operationType,
-        providerId: info?.providerId ?? provider.providerId,
-        isNewUser: info?.isNewUser ?? null,
-        uid: result.user.uid,
-        email: result.user.email,
-      });
+      await signInWithPopup(auth, provider);
       goToNext();
     } catch (e: unknown) {
-      logAuthError("apple_sign_in_failed", e);
       setAppleHint(true);
       setError(getErrorMessage(e, "Apple sign in failed"));
     } finally {
