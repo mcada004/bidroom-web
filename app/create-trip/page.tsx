@@ -14,6 +14,12 @@ import {
 import { auth, db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
 import { pullListingPreview } from "@/src/lib/listingPreviewClient";
+import SleepingArrangementsSection from "@/src/components/SleepingArrangementsSection";
+import {
+  createDefaultSleepingRooms,
+  normalizeBedroomCount,
+} from "@/src/lib/sleepingArrangements";
+import type { SleepingRoom } from "@/src/lib/sleepingArrangements";
 
 function makeInviteCode(length = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -65,6 +71,10 @@ export default function CreateTripPage() {
   const [listingBedrooms, setListingBedrooms] = useState<number | null>(null);
   const [listingBeds, setListingBeds] = useState<number | null>(null);
   const [listingBaths, setListingBaths] = useState<number | null>(null);
+  const [sleepingBedroomCount, setSleepingBedroomCount] = useState<number>(1);
+  const [sleepingRooms, setSleepingRooms] = useState<SleepingRoom[]>([]);
+  const [sleepingDetailsEnabled, setSleepingDetailsEnabled] = useState(false);
+  const [sleepingBedroomCountTouched, setSleepingBedroomCountTouched] = useState(false);
   const [totalPrice, setTotalPrice] = useState<number>(2000);
   const [roomCount, setRoomCount] = useState<number>(4);
   const [pricingMode, setPricingMode] = useState<PricingMode>("equalSplit");
@@ -144,6 +154,9 @@ export default function CreateTripPage() {
       setListingBedrooms(pulled.listingBedrooms);
       setListingBeds(pulled.listingBeds);
       setListingBaths(pulled.listingBaths);
+      if (pulled.listingBedrooms !== null && !sleepingBedroomCountTouched) {
+        setSleepingBedroomCount(normalizeBedroomCount(pulled.listingBedrooms));
+      }
 
       if (
         !pulled.listingTitle &&
@@ -226,6 +239,7 @@ export default function CreateTripPage() {
     });
     const startingPricePerRoom = equalSplitStartingPrice;
     const normalizedTripName = tripName.trim() || "New Trip";
+    const normalizedSleepingBedroomCount = normalizeBedroomCount(sleepingBedroomCount);
     const payload = {
       name: normalizedTripName,
       status: "draft",
@@ -241,6 +255,12 @@ export default function CreateTripPage() {
       listingBedrooms,
       listingBeds,
       listingBaths,
+      sleepingArrangements: {
+        bedroomCount: normalizedSleepingBedroomCount,
+        rooms: sleepingDetailsEnabled
+          ? createDefaultSleepingRooms(normalizedSleepingBedroomCount, sleepingRooms)
+          : [],
+      },
 
       totalPrice: P,
       roomCount: N,
@@ -479,6 +499,20 @@ export default function CreateTripPage() {
               min={1}
             />
           </label>
+
+          <SleepingArrangementsSection
+            bedroomCount={sleepingBedroomCount}
+            rooms={sleepingRooms}
+            detailsEnabled={sleepingDetailsEnabled}
+            disabled={busy}
+            helperText="This does not change the auction room count below. Use it only to describe where people can sleep."
+            onBedroomCountChange={(count) => {
+              setSleepingBedroomCountTouched(true);
+              setSleepingBedroomCount(count);
+            }}
+            onRoomsChange={setSleepingRooms}
+            onDetailsEnabledChange={setSleepingDetailsEnabled}
+          />
 
           <label className="label">
             Number of rooms

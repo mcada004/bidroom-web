@@ -15,6 +15,12 @@ import {
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
 import { pullListingPreview } from "@/src/lib/listingPreviewClient";
+import SleepingArrangementsSection from "@/src/components/SleepingArrangementsSection";
+import {
+  coerceSleepingArrangements,
+  createDefaultSleepingRooms,
+} from "@/src/lib/sleepingArrangements";
+import type { SleepingRoom } from "@/src/lib/sleepingArrangements";
 
 type TripStatus = "draft" | "live" | "ended";
 
@@ -32,6 +38,10 @@ type Trip = {
   listingLocationLabel?: string | null;
   listingDescription?: string | null;
   listingSiteName?: string | null;
+  listingBedrooms?: number | null;
+  listingBeds?: number | null;
+  listingBaths?: number | null;
+  sleepingArrangements?: unknown;
 
   totalPrice: number;
   roomCount: number;
@@ -101,6 +111,9 @@ export default function TripSettingsPage() {
   const [listingLocationLabel, setListingLocationLabel] = useState("");
   const [listingDescription, setListingDescription] = useState("");
   const [listingSiteName, setListingSiteName] = useState("");
+  const [sleepingBedroomCount, setSleepingBedroomCount] = useState(1);
+  const [sleepingRooms, setSleepingRooms] = useState<SleepingRoom[]>([]);
+  const [sleepingDetailsEnabled, setSleepingDetailsEnabled] = useState(false);
 
   const [totalPriceInput, setTotalPriceInput] = useState("");
   const [roomCountInput, setRoomCountInput] = useState("");
@@ -176,6 +189,10 @@ export default function TripSettingsPage() {
             antiSnipeWindowMinutes: Number(t.antiSnipeWindowMinutes ?? 10),
             antiSnipeExtendMinutes: Number(t.antiSnipeExtendMinutes ?? 10),
           };
+          const nextSleeping = coerceSleepingArrangements(
+            t.sleepingArrangements,
+            Number(t.listingBedrooms ?? t.roomCount ?? 1)
+          );
 
           setTrip(nextTrip);
 
@@ -193,6 +210,9 @@ export default function TripSettingsPage() {
           setBidIncrementInput(String(nextTrip.bidIncrement));
           setAntiWindowInput(String(nextTrip.antiSnipeWindowMinutes));
           setAntiExtendInput(String(nextTrip.antiSnipeExtendMinutes));
+          setSleepingBedroomCount(nextSleeping.bedroomCount);
+          setSleepingRooms(nextSleeping.rooms);
+          setSleepingDetailsEnabled(nextSleeping.rooms.length > 0);
         },
         (snapshotError) => setError(snapshotError.message)
       );
@@ -226,6 +246,12 @@ export default function TripSettingsPage() {
       const payload: Record<string, unknown> = {
         name: nextName,
         listingUrl: listingUrlValue,
+        sleepingArrangements: {
+          bedroomCount: sleepingBedroomCount,
+          rooms: sleepingDetailsEnabled
+            ? createDefaultSleepingRooms(sleepingBedroomCount, sleepingRooms)
+            : [],
+        },
         bidIncrement: nextBidIncrement,
         antiSnipeWindowMinutes: nextAntiWindow,
         antiSnipeExtendMinutes: nextAntiExtend,
@@ -726,6 +752,17 @@ export default function TripSettingsPage() {
               title={draftOnlyFieldTitle}
             />
           </label>
+
+          <SleepingArrangementsSection
+            bedroomCount={sleepingBedroomCount}
+            rooms={sleepingRooms}
+            detailsEnabled={sleepingDetailsEnabled}
+            disabled={saving || actionBusy !== null}
+            helperText="This is separate from auction room count, so you can save just the bedroom count or add details later."
+            onBedroomCountChange={setSleepingBedroomCount}
+            onRoomsChange={setSleepingRooms}
+            onDetailsEnabledChange={setSleepingDetailsEnabled}
+          />
 
           <label className="label">
             Total trip price ($)
