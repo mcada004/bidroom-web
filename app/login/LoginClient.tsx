@@ -83,6 +83,29 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     return "Google sign in failed";
   }
 
+  function getAppleErrorMessage(error: unknown) {
+    if (error instanceof FirebaseError) {
+      switch (error.code) {
+        case "auth/popup-blocked":
+          return "The Apple sign-in popup was blocked by the browser. Allow popups and try again.";
+        case "auth/popup-closed-by-user":
+          return "The Apple sign-in popup was closed before finishing. Please try again.";
+        case "auth/network-request-failed":
+          return "Network error during Apple sign-in. Check your connection and try again.";
+        case "auth/unauthorized-domain":
+          return "This domain is not allowed for Apple sign-in in Firebase yet.";
+        case "auth/operation-not-allowed":
+          return "Apple sign-in is not enabled in Firebase Auth yet.";
+        case "auth/invalid-credential":
+          return "Apple sign-in was rejected because the Apple credentials or redirect settings do not match.";
+        default:
+          return error.message || "Apple sign in failed";
+      }
+    }
+
+    return "Apple sign in failed";
+  }
+
   function logGoogleError(error: unknown) {
     if (error instanceof FirebaseError) {
       console.error("[google-sign-in] failed", {
@@ -102,6 +125,33 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     }
 
     console.error("[google-sign-in] failed", { error });
+  }
+
+  function logAppleError(error: unknown) {
+    if (error instanceof FirebaseError) {
+      console.error("[apple-sign-in] failed", {
+        code: error.code,
+        message: error.message,
+        customData: error.customData,
+        credential: OAuthProvider.credentialFromError(error)
+          ? {
+              hasAccessToken: !!OAuthProvider.credentialFromError(error)?.accessToken,
+              hasIdToken: !!OAuthProvider.credentialFromError(error)?.idToken,
+            }
+          : null,
+      });
+      return;
+    }
+
+    if (error instanceof Error) {
+      console.error("[apple-sign-in] failed", {
+        message: error.message,
+        name: error.name,
+      });
+      return;
+    }
+
+    console.error("[apple-sign-in] failed", { error });
   }
 
   async function handleSignIn() {
@@ -151,13 +201,36 @@ export default function LoginClient({ createAccountHref }: LoginClientProps) {
     setError(null);
     setAppleHint(false);
     setBusy(true);
+    console.log("[apple-sign-in] button clicked", { nextPath });
     try {
       const provider = new OAuthProvider("apple.com");
-      await signInWithPopup(auth, provider);
+      provider.addScope("email");
+      provider.addScope("name");
+      console.log("[apple-sign-in] provider created", {
+        providerId: provider.providerId,
+        scopes: ["email", "name"],
+      });
+      console.log("[apple-sign-in] popup start", {
+        method: "signInWithPopup",
+        providerId: provider.providerId,
+      });
+      const result = await signInWithPopup(auth, provider);
+      const info = getAdditionalUserInfo(result);
+      const credential = OAuthProvider.credentialFromResult(result);
+      console.log("[apple-sign-in] success", {
+        operationType: result.operationType,
+        providerId: info?.providerId ?? provider.providerId,
+        isNewUser: info?.isNewUser ?? null,
+        uid: result.user.uid,
+        email: result.user.email,
+        hasAccessToken: !!credential?.accessToken,
+        hasIdToken: !!credential?.idToken,
+      });
       goToNext();
     } catch (e: unknown) {
+      logAppleError(e);
       setAppleHint(true);
-      setError(getErrorMessage(e, "Apple sign in failed"));
+      setError(getAppleErrorMessage(e));
     } finally {
       setBusy(false);
     }
