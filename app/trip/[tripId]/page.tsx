@@ -52,6 +52,9 @@ type Trip = {
   listingUrl?: string | null;
   listingTitle?: string | null;
   listingImageUrl?: string | null;
+  listingLocationCity?: string | null;
+  listingLocationState?: string | null;
+  listingLocationLabel?: string | null;
   listingDescription?: string | null;
   listingSiteName?: string | null;
   listingPreviewError?: string | null;
@@ -441,6 +444,8 @@ export default function TripPage() {
               inviteCode: typeof data.inviteCode === "string" ? data.inviteCode : "",
               name: typeof data.name === "string" ? data.name : "Untitled trip",
               status: data.status === "live" || data.status === "ended" ? data.status : "draft",
+              listingLocationLabel:
+                typeof data.listingLocationLabel === "string" ? data.listingLocationLabel : null,
               updatedAt: serverTimestamp(),
             },
             { merge: true }
@@ -513,6 +518,26 @@ export default function TripPage() {
       if (unsubMembers) unsubMembers();
     };
   }, [tripId, inviteCode, user, loading, preferredDisplayName]);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous || !trip) return;
+
+    setDoc(
+      doc(db, "users", user.uid, "myTrips", tripId),
+      {
+        tripId,
+        inviteCode: typeof trip.inviteCode === "string" ? trip.inviteCode : "",
+        name: typeof trip.name === "string" ? trip.name : "Untitled trip",
+        status: trip.status === "live" || trip.status === "ended" ? trip.status : "draft",
+        listingLocationLabel:
+          typeof trip.listingLocationLabel === "string" ? trip.listingLocationLabel : null,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    ).catch((syncError) => {
+      console.warn("[trip] myTrips sync skipped", syncError);
+    });
+  }, [trip, tripId, user]);
 
   // ---------- Admin helpers (core) ----------
   async function startAuctionCore() {
@@ -1112,8 +1137,16 @@ export default function TripPage() {
     typeof trip.listingDescription === "string" && trip.listingDescription.trim()
       ? trip.listingDescription.trim()
       : null;
+  const listingLocationLabel =
+    typeof trip.listingLocationLabel === "string" && trip.listingLocationLabel.trim()
+      ? trip.listingLocationLabel.trim()
+      : null;
   const hasListingPreviewData = Boolean(
-    trip.listingImageUrl || trip.listingTitle || trip.listingSiteName || listingDescription
+    trip.listingImageUrl ||
+      trip.listingTitle ||
+      listingLocationLabel ||
+      trip.listingSiteName ||
+      listingDescription
   );
   const hasListingStats = listingStats.length > 0;
   const listingPreviewError =
@@ -1147,27 +1180,63 @@ export default function TripPage() {
         </section>
       ) : null}
 
-      <section className="card">
-        <div className="section-title">Share link</div>
-        <div className="code-block">{shareUrl}</div>
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="button secondary" onClick={() => copyShareLink(shareUrl)}>
-            {copyState === "copied" ? "Copied!" : "Copy link"}
-          </button>
-        </div>
-        {copyError ? (
-          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-            {copyError}
-          </p>
-        ) : null}
-        {trip.listingUrl ? (
-          <div style={{ marginTop: 12 }}>
-            <a href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
-              View listing
-            </a>
-          </div>
-        ) : null}
-      </section>
+      {shouldShowListingPreviewCard ? (
+        <section className="card section">
+          <div className="section-title">Listing preview</div>
+
+          {hasListingPreviewData ? (
+            <div style={{ display: "grid", gap: 14 }}>
+              {trip.listingImageUrl ? (
+                <img
+                  src={trip.listingImageUrl}
+                  alt={trip.listingTitle || "Listing preview"}
+                  style={{
+                    width: "100%",
+                    maxWidth: 520,
+                    borderRadius: 12,
+                    border: "1px solid var(--line)",
+                    maxHeight: 320,
+                    objectFit: "cover",
+                  }}
+                />
+              ) : null}
+              <div style={{ display: "grid", gap: 8 }}>
+                <strong>{trip.listingTitle || "Listing title unavailable"}</strong>
+                {listingLocationLabel ? <div className="muted">{listingLocationLabel}</div> : null}
+                {(trip.listingSiteName || listingHostname) ? (
+                  <div className="muted">{trip.listingSiteName || listingHostname}</div>
+                ) : null}
+                {listingDescription ? (
+                  <div className="muted">
+                    {listingDescription.length > 260
+                      ? `${listingDescription.slice(0, 257)}...`
+                      : listingDescription}
+                  </div>
+                ) : null}
+                {trip.listingUrl ? (
+                  <a className="link" href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
+                    View full listing
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : listingPreviewLoading ? (
+            <div className="notice">Loading listing preview…</div>
+          ) : trip.listingUrl ? (
+            <div className="notice">Preview unavailable — site blocks scraping</div>
+          ) : null}
+
+          {hasListingStats ? (
+            <div className="row" style={{ marginTop: 12 }}>
+              {listingStats.map((value) => (
+                <span key={value} className="pill">
+                  {value}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="card section">
         <div className="section-title">Lobby</div>
@@ -1203,103 +1272,27 @@ export default function TripPage() {
         </ul>
       </section>
 
-      <section className="card section">
-        <div className="section-title">Auction</div>
-
-        {trip.status === "draft" && <p className="muted">Not started yet.</p>}
-        {trip.status === "live" && <p className="muted">Time remaining: <strong>{countdown}</strong></p>}
-        {trip.status === "ended" && <p className="muted">Auction ended. See Results for final amounts.</p>}
-
-        {isManager && (
-          <div className="row" style={{ marginTop: 10 }}>
-            {trip.status === "draft" && (
-              <button disabled={busyAdmin} onClick={startAuction} className="button">
-                {busyAdmin ? "Working…" : "Start auction"}
-              </button>
-            )}
-
-            {trip.status === "live" && (
-              <>
-                <button disabled={busyAdmin} onClick={endAuctionNow} className="button secondary">
-                  {busyAdmin ? "Working…" : "End auction now"}
-                </button>
-
-                <button disabled={busyAdmin} onClick={restartAuction} className="button ghost">
-                  {busyAdmin ? "Working…" : "Restart auction"}
-                </button>
-              </>
-            )}
-
-            {trip.status === "ended" && (
-              <>
-                <button disabled={busyAdmin} onClick={restartAuction} className="button">
-                  {busyAdmin ? "Working…" : "Restart auction"}
-                </button>
-                <button disabled={busyAdmin} onClick={resetToDraft} className="button ghost">
-                  {busyAdmin ? "Working…" : "Reset to draft"}
-                </button>
-              </>
-            )}
+      <section className="card">
+        <div className="section-title">Share link</div>
+        <div className="code-block">{shareUrl}</div>
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="button secondary" onClick={() => copyShareLink(shareUrl)}>
+            {copyState === "copied" ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+        {copyError ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            {copyError}
+          </p>
+        ) : null}
+        {trip.listingUrl ? (
+          <div style={{ marginTop: 12 }}>
+            <a href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
+              View listing
+            </a>
           </div>
-        )}
+        ) : null}
       </section>
-
-      {shouldShowListingPreviewCard ? (
-        <section className="card section">
-          <div className="section-title">Listing preview</div>
-
-          {hasListingPreviewData ? (
-            <div style={{ display: "grid", gap: 14 }}>
-              {trip.listingImageUrl ? (
-                <img
-                  src={trip.listingImageUrl}
-                  alt={trip.listingTitle || "Listing preview"}
-                  style={{
-                    width: "100%",
-                    maxWidth: 520,
-                    borderRadius: 12,
-                    border: "1px solid var(--line)",
-                    maxHeight: 320,
-                    objectFit: "cover",
-                  }}
-                />
-              ) : null}
-              <div style={{ display: "grid", gap: 8 }}>
-                <strong>{trip.listingTitle || "Listing title unavailable"}</strong>
-                {(trip.listingSiteName || listingHostname) ? (
-                  <div className="muted">{trip.listingSiteName || listingHostname}</div>
-                ) : null}
-                {listingDescription ? (
-                  <div className="muted">
-                    {listingDescription.length > 260
-                      ? `${listingDescription.slice(0, 257)}...`
-                      : listingDescription}
-                  </div>
-                ) : null}
-                {trip.listingUrl ? (
-                  <a className="link" href={trip.listingUrl} target="_blank" rel="noopener noreferrer">
-                    View full listing
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          ) : listingPreviewLoading ? (
-            <div className="notice">Loading listing preview…</div>
-          ) : trip.listingUrl ? (
-            <div className="notice">Preview unavailable — site blocks scraping</div>
-          ) : null}
-
-          {hasListingStats ? (
-            <div className="row" style={{ marginTop: 12 }}>
-              {listingStats.map((value) => (
-                <span key={value} className="pill">
-                  {value}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
 
       <section className="card section">
         <div className="section-title">Rooms</div>
@@ -1421,6 +1414,46 @@ export default function TripPage() {
             })}
           </ul>
         )}
+      </section>
+
+      <section className="card section">
+        <div className="section-title">Auction controls</div>
+
+        {trip.status === "draft" && <p className="muted">Not started yet.</p>}
+        {trip.status === "live" && countdown ? <p className="muted">Time remaining: <strong>{countdown}</strong></p> : null}
+        {trip.status === "ended" && <p className="muted">Auction ended. See Results for final amounts.</p>}
+
+        {isManager ? (
+          <div className="row" style={{ marginTop: 10 }}>
+            {trip.status === "draft" ? (
+              <button disabled={busyAdmin} onClick={startAuction} className="button">
+                {busyAdmin ? "Working…" : "Start auction"}
+              </button>
+            ) : null}
+
+            {trip.status === "live" ? (
+              <>
+                <button disabled={busyAdmin} onClick={endAuctionNow} className="button secondary">
+                  {busyAdmin ? "Working…" : "End auction now"}
+                </button>
+                <button disabled={busyAdmin} onClick={restartAuction} className="button ghost">
+                  {busyAdmin ? "Working…" : "Restart auction"}
+                </button>
+              </>
+            ) : null}
+
+            {trip.status === "ended" ? (
+              <>
+                <button disabled={busyAdmin} onClick={restartAuction} className="button">
+                  {busyAdmin ? "Working…" : "Restart auction"}
+                </button>
+                <button disabled={busyAdmin} onClick={resetToDraft} className="button ghost">
+                  {busyAdmin ? "Working…" : "Reset to draft"}
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <div className="section row" style={{ justifyContent: "space-between" }}>

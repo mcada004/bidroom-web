@@ -1,6 +1,9 @@
 export type ListingPullResult = {
   listingTitle: string | null;
   listingImageUrl: string | null;
+  listingLocationCity: string | null;
+  listingLocationState: string | null;
+  listingLocationLabel: string | null;
   listingBedrooms: number | null;
   listingBeds: number | null;
   listingBaths: number | null;
@@ -11,6 +14,9 @@ type ListingPreviewApiPayload = {
   preview?: {
     title?: unknown;
     primaryPhotoUrl?: unknown;
+    locationCity?: unknown;
+    locationState?: unknown;
+    locationLabel?: unknown;
     bedrooms?: unknown;
     beds?: unknown;
     bathrooms?: unknown;
@@ -56,6 +62,9 @@ async function pullOgLinkPreview(input: { idToken: string; listingUrl: string })
   return {
     listingTitle: toOptionalString(payload.title),
     listingImageUrl: toOptionalString(payload.image),
+    listingLocationCity: null,
+    listingLocationState: null,
+    listingLocationLabel: null,
     listingBedrooms: null,
     listingBeds: null,
     listingBaths: null,
@@ -95,6 +104,9 @@ export async function pullListingPreview(input: {
   return {
     listingTitle: toOptionalString(preview.title),
     listingImageUrl: toOptionalString(preview.primaryPhotoUrl),
+    listingLocationCity: toOptionalString(preview.locationCity),
+    listingLocationState: toOptionalString(preview.locationState),
+    listingLocationLabel: toOptionalString(preview.locationLabel),
     listingBedrooms: toOptionalNumber(preview.bedrooms),
     listingBeds: toOptionalNumber(preview.beds),
     listingBaths: toOptionalNumber(preview.bathrooms),

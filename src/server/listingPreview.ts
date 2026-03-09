@@ -13,6 +13,9 @@ export type ListingPreview = {
   listingUrl: string;
   sourceUrl: string | null;
   title: string | null;
+  locationCity: string | null;
+  locationState: string | null;
+  locationLabel: string | null;
   bedrooms: number | null;
   beds: number | null;
   bathrooms: number | null;
@@ -35,6 +38,20 @@ function asNumber(value: unknown): number | null {
     if (!matched) return null;
     const parsed = Number(matched[0]);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function firstNonEmptyString(values: unknown[]): string | null {
+  for (const value of values) {
+    const next = asNonEmptyString(value);
+    if (next) return next;
   }
   return null;
 }
@@ -149,7 +166,150 @@ function pickVrboProperty(properties: unknown[], parsed: ParsedListingUrl): Reco
   return null;
 }
 
-function toPreviewBase(parsed: ParsedListingUrl): Omit<ListingPreview, "title" | "bedrooms" | "beds" | "bathrooms" | "primaryPhotoUrl" | "sourceUrl"> {
+function normalizeLocationLabel(raw: string): string {
+  const compact = raw.replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+
+  const parts = compact
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;
+  return compact;
+}
+
+function buildLocation(input: {
+  city?: string | null;
+  state?: string | null;
+  label?: string | null;
+}): Pick<ListingPreview, "locationCity" | "locationState" | "locationLabel"> {
+  const city = asNonEmptyString(input.city ?? null);
+  const state = asNonEmptyString(input.state ?? null);
+  const rawLabel = asNonEmptyString(input.label ?? null);
+
+  if (city && state) {
+    return {
+      locationCity: city,
+      locationState: state,
+      locationLabel: `${city}, ${state}`,
+    };
+  }
+
+  if (rawLabel) {
+    const normalizedLabel = normalizeLocationLabel(rawLabel);
+    if (city || state) {
+      return {
+        locationCity: city,
+        locationState: state,
+        locationLabel: normalizedLabel,
+      };
+    }
+
+    const parts = normalizedLabel.split(",").map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return {
+        locationCity: parts[0],
+        locationState: parts[1],
+        locationLabel: `${parts[0]}, ${parts[1]}`,
+      };
+    }
+
+    return {
+      locationCity: city,
+      locationState: state,
+      locationLabel: normalizedLabel,
+    };
+  }
+
+  if (city) {
+    return {
+      locationCity: city,
+      locationState: state,
+      locationLabel: state ? `${city}, ${state}` : city,
+    };
+  }
+
+  if (state) {
+    return {
+      locationCity: city,
+      locationState: state,
+      locationLabel: state,
+    };
+  }
+
+  return {
+    locationCity: null,
+    locationState: null,
+    locationLabel: null,
+  };
+}
+
+function extractLocationFromCandidate(
+  candidate: unknown
+): Pick<ListingPreview, "locationCity" | "locationState" | "locationLabel"> | null {
+  const asString = asNonEmptyString(candidate);
+  if (asString) return buildLocation({ label: asString });
+
+  const obj = asRecord(candidate);
+  if (!obj) return null;
+
+  const city = firstNonEmptyString([
+    obj.city,
+    obj.localized_city,
+    obj.locality,
+    obj.market,
+    obj.town,
+  ]);
+  const state = firstNonEmptyString([
+    obj.state,
+    obj.state_code,
+    obj.state_name,
+    obj.region,
+    obj.province,
+  ]);
+  const label = firstNonEmptyString([
+    obj.label,
+    obj.name,
+    obj.location,
+    obj.localized_location,
+    obj.display_name,
+    obj.formatted_address,
+  ]);
+
+  const location = buildLocation({ city, state, label });
+  return location.locationLabel ? location : null;
+}
+
+function extractLocation(
+  ...candidates: unknown[]
+): Pick<ListingPreview, "locationCity" | "locationState" | "locationLabel"> {
+  for (const candidate of candidates) {
+    const location = extractLocationFromCandidate(candidate);
+    if (location?.locationLabel) return location;
+  }
+
+  return {
+    locationCity: null,
+    locationState: null,
+    locationLabel: null,
+  };
+}
+
+function toPreviewBase(
+  parsed: ParsedListingUrl
+): Omit<
+  ListingPreview,
+  | "title"
+  | "locationCity"
+  | "locationState"
+  | "locationLabel"
+  | "bedrooms"
+  | "beds"
+  | "bathrooms"
+  | "primaryPhotoUrl"
+  | "sourceUrl"
+> {
   return {
     provider: "searchapi",
     platform: parsed.platform,
@@ -182,6 +342,17 @@ export function extractAirbnbPreviewFromResponse(
       asNonEmptyString(details.url) ??
       parsed.canonicalUrl,
     title: asNonEmptyString(details.name) ?? asNonEmptyString(details.title),
+    ...extractLocation(
+      details.location,
+      details.address,
+      details.structured_address,
+      details.location_details,
+      {
+        city: details.city,
+        state: details.state,
+        label: details.localized_location,
+      }
+    ),
     bedrooms: asNumber(details.number_of_bedrooms) ?? asNumber(details.bedrooms),
     beds: asNumber(details.number_of_beds) ?? asNumber(details.beds),
     bathrooms: asNumber(details.number_of_bathrooms) ?? asNumber(details.bathrooms),
@@ -223,6 +394,15 @@ export function extractVrboPreviewFromResponse(
       asNonEmptyString(selected.property_url) ??
       parsed.canonicalUrl,
     title: asNonEmptyString(selected.name) ?? asNonEmptyString(selected.title),
+    ...extractLocation(
+      selected.location,
+      selected.address,
+      {
+        city: selected.city,
+        state: selected.state ?? selected.region,
+        label: selected.formatted_address ?? selected.location_label,
+      }
+    ),
     bedrooms: asNumber(selected.bedrooms),
     beds: asNumber(selected.beds),
     bathrooms: asNumber(selected.bathrooms),

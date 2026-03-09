@@ -19,12 +19,16 @@ test("parseListingUrl detects Vrbo IDs from .ha path", () => {
   assert.equal(parsed.listingId, "41404137");
 });
 
-test("extractAirbnbPreviewFromResponse maps beds/baths/bedrooms/photo", () => {
+test("extractAirbnbPreviewFromResponse maps location, beds, baths, bedrooms, and photo", () => {
   const parsed = parseListingUrl("https://www.airbnb.com/rooms/78945612");
   const preview = extractAirbnbPreviewFromResponse(
     {
       property_details: {
         name: "Oceanfront Home",
+        location: {
+          city: "Destin",
+          state: "Florida",
+        },
         number_of_bedrooms: 4,
         number_of_beds: 5,
         number_of_bathrooms: 3.5,
@@ -36,6 +40,9 @@ test("extractAirbnbPreviewFromResponse maps beds/baths/bedrooms/photo", () => {
   );
 
   assert.equal(preview.platform, "airbnb");
+  assert.equal(preview.locationCity, "Destin");
+  assert.equal(preview.locationState, "Florida");
+  assert.equal(preview.locationLabel, "Destin, Florida");
   assert.equal(preview.bedrooms, 4);
   assert.equal(preview.beds, 5);
   assert.equal(preview.bathrooms, 3.5);
@@ -58,6 +65,7 @@ test("extractVrboPreviewFromResponse picks matching listing and maps fields", ()
         {
           name: "Beach House",
           link: "https://www.vrbo.com/41404137ha",
+          location: "Gulf Shores, Alabama, United States",
           bedrooms: 3,
           bathrooms: "2.5 bathrooms",
           beds: 4,
@@ -70,6 +78,9 @@ test("extractVrboPreviewFromResponse picks matching listing and maps fields", ()
 
   assert.equal(preview.platform, "vrbo");
   assert.equal(preview.title, "Beach House");
+  assert.equal(preview.locationCity, "Gulf Shores");
+  assert.equal(preview.locationState, "Alabama");
+  assert.equal(preview.locationLabel, "Gulf Shores, Alabama");
   assert.equal(preview.bedrooms, 3);
   assert.equal(preview.bathrooms, 2.5);
   assert.equal(preview.beds, 4);

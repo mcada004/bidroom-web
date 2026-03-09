@@ -59,6 +59,9 @@ export default function CreateTripPage() {
   const [listingUrl, setListingUrl] = useState("");
   const [listingTitle, setListingTitle] = useState("");
   const [listingImageUrl, setListingImageUrl] = useState("");
+  const [listingLocationCity, setListingLocationCity] = useState<string | null>(null);
+  const [listingLocationState, setListingLocationState] = useState<string | null>(null);
+  const [listingLocationLabel, setListingLocationLabel] = useState("");
   const [listingBedrooms, setListingBedrooms] = useState<number | null>(null);
   const [listingBeds, setListingBeds] = useState<number | null>(null);
   const [listingBaths, setListingBaths] = useState<number | null>(null);
@@ -135,6 +138,9 @@ export default function CreateTripPage() {
       setListingUrl(listingUrlForPull);
       setListingTitle(pulled.listingTitle ?? "");
       setListingImageUrl(pulled.listingImageUrl ?? "");
+      setListingLocationCity(pulled.listingLocationCity);
+      setListingLocationState(pulled.listingLocationState);
+      setListingLocationLabel(pulled.listingLocationLabel ?? "");
       setListingBedrooms(pulled.listingBedrooms);
       setListingBeds(pulled.listingBeds);
       setListingBaths(pulled.listingBaths);
@@ -142,6 +148,7 @@ export default function CreateTripPage() {
       if (
         !pulled.listingTitle &&
         !pulled.listingImageUrl &&
+        !pulled.listingLocationLabel &&
         pulled.listingBedrooms === null &&
         pulled.listingBeds === null &&
         pulled.listingBaths === null
@@ -226,6 +233,9 @@ export default function CreateTripPage() {
       pricingMode,
       listingTitle: listingTitle.trim() || null,
       listingImageUrl: listingImageUrl.trim() || null,
+      listingLocationCity,
+      listingLocationState,
+      listingLocationLabel: listingLocationLabel.trim() || null,
       listingDescription: null,
       listingSiteName: null,
       listingBedrooms,
@@ -337,6 +347,7 @@ export default function CreateTripPage() {
         inviteCode,
         name: normalizedTripName,
         status: "draft",
+        listingLocationLabel: listingLocationLabel.trim() || null,
         updatedAt: serverTimestamp(),
       });
     } catch (err) {
@@ -419,7 +430,7 @@ export default function CreateTripPage() {
 
           {listingPullError ? <p className="notice">{listingPullError}</p> : null}
 
-          {(listingImageUrl || listingTitle || listingStatsPreview.length > 0) ? (
+          {(listingImageUrl || listingTitle || listingLocationLabel || listingStatsPreview.length > 0) ? (
             <div className="list-item" style={{ display: "grid", gap: 10 }}>
               {listingImageUrl ? (
                 <img
@@ -440,6 +451,11 @@ export default function CreateTripPage() {
                   Listing preview
                 </div>
                 <div>{listingTitle || "Listing title unavailable"}</div>
+                {listingLocationLabel ? (
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {listingLocationLabel}
+                  </div>
+                ) : null}
                 {listingStatsPreview.length > 0 ? (
                   <div className="row">
                     {listingStatsPreview.map((value) => (

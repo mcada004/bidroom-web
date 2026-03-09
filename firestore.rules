@@ -50,8 +50,17 @@ service cloud.firestore {
           "listingUrl",
           "listingTitle",
           "listingImageUrl",
+          "listingLocationCity",
+          "listingLocationState",
+          "listingLocationLabel",
           "listingDescription",
           "listingSiteName",
+          "listingPreview",
+          "listingPreviewUpdatedAt",
+          "listingPreviewError",
+          "listingBedrooms",
+          "listingBeds",
+          "listingBaths",
           "totalPrice",
           "roomCount",
           "auctionDurationHours",
@@ -65,6 +74,12 @@ service cloud.firestore {
           "updatedAt"
         ]) &&
         (!after.keys().hasAny(["name"]) || (after.name is string && after.name.size() > 0 && after.name.size() <= 120)) &&
+        (!after.keys().hasAny(["listingLocationCity"]) || after.listingLocationCity == null || (after.listingLocationCity is string && after.listingLocationCity.size() <= 120)) &&
+        (!after.keys().hasAny(["listingLocationState"]) || after.listingLocationState == null || (after.listingLocationState is string && after.listingLocationState.size() <= 120)) &&
+        (!after.keys().hasAny(["listingLocationLabel"]) || after.listingLocationLabel == null || (after.listingLocationLabel is string && after.listingLocationLabel.size() <= 180)) &&
+        (!after.keys().hasAny(["listingBedrooms"]) || after.listingBedrooms == null || (after.listingBedrooms is number && after.listingBedrooms >= 0)) &&
+        (!after.keys().hasAny(["listingBeds"]) || after.listingBeds == null || (after.listingBeds is number && after.listingBeds >= 0)) &&
+        (!after.keys().hasAny(["listingBaths"]) || after.listingBaths == null || (after.listingBaths is number && after.listingBaths >= 0)) &&
         (!after.keys().hasAny(["totalPrice"]) || (after.totalPrice is number && after.totalPrice > 0)) &&
         (!after.keys().hasAny(["roomCount"]) || (after.roomCount is number && after.roomCount >= 1)) &&
         (!after.keys().hasAny(["auctionDurationHours"]) || (after.auctionDurationHours is number && after.auctionDurationHours >= 1)) &&

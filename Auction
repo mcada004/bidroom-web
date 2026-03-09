@@ -1,0 +1,15 @@
+app/my-trips/page.tsx:328:              <div className="section-title" style={{ marginBottom: 0 }}>
+app/my-trips/page.tsx:347:              <div className="section-title">Archived trips</div>
+app/trip/[tripId]/page.tsx:1184:        <div className="section-title">Share link</div>
+app/trip/[tripId]/page.tsx:1206:        <div className="section-title">Lobby</div>
+app/trip/[tripId]/page.tsx:1240:        <div className="section-title">Auction</div>
+app/trip/[tripId]/page.tsx:1282:          <div className="section-title">Listing preview</div>
+app/trip/[tripId]/page.tsx:1339:        <div className="section-title">Rooms</div>
+app/globals.css:137:.section-title {
+app/trip/[tripId]/results/page.tsx:238:        <div className="section-title">My status</div>
+app/trip/[tripId]/results/page.tsx:278:            <div className="section-title">Live leaders by room</div>
+app/trip/[tripId]/results/page.tsx:298:            <div className="section-title">Live estimated pricing</div>
+app/trip/[tripId]/results/page.tsx:311:            <div className="section-title">Final winners</div>
+app/trip/[tripId]/results/page.tsx:331:            <div className="section-title">Final unbid room pricing</div>
+app/trip/[tripId]/settings/page.tsx:547:        <div className="section-title">Auction controls</div>
+app/trip/[tripId]/settings/page.tsx:574:        <div className="section-title">Editable fields</div>

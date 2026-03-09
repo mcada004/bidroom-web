@@ -27,6 +27,9 @@ type Trip = {
   listingUrl?: string | null;
   listingTitle?: string | null;
   listingImageUrl?: string | null;
+  listingLocationCity?: string | null;
+  listingLocationState?: string | null;
+  listingLocationLabel?: string | null;
   listingDescription?: string | null;
   listingSiteName?: string | null;
 
@@ -95,6 +98,7 @@ export default function TripSettingsPage() {
   const [listingUrl, setListingUrl] = useState("");
   const [listingTitle, setListingTitle] = useState("");
   const [listingImageUrl, setListingImageUrl] = useState("");
+  const [listingLocationLabel, setListingLocationLabel] = useState("");
   const [listingDescription, setListingDescription] = useState("");
   const [listingSiteName, setListingSiteName] = useState("");
 
@@ -160,6 +164,9 @@ export default function TripSettingsPage() {
             listingUrl: typeof t.listingUrl === "string" ? t.listingUrl : null,
             listingTitle: typeof t.listingTitle === "string" ? t.listingTitle : null,
             listingImageUrl: typeof t.listingImageUrl === "string" ? t.listingImageUrl : null,
+            listingLocationCity: typeof t.listingLocationCity === "string" ? t.listingLocationCity : null,
+            listingLocationState: typeof t.listingLocationState === "string" ? t.listingLocationState : null,
+            listingLocationLabel: typeof t.listingLocationLabel === "string" ? t.listingLocationLabel : null,
             listingDescription: typeof t.listingDescription === "string" ? t.listingDescription : null,
             listingSiteName: typeof t.listingSiteName === "string" ? t.listingSiteName : null,
             totalPrice: Number(t.totalPrice ?? 0),
@@ -176,6 +183,7 @@ export default function TripSettingsPage() {
           setListingUrl(nextTrip.listingUrl ?? "");
           setListingTitle(nextTrip.listingTitle ?? "");
           setListingImageUrl(nextTrip.listingImageUrl ?? "");
+          setListingLocationLabel(nextTrip.listingLocationLabel ?? "");
           setListingDescription(nextTrip.listingDescription ?? "");
           setListingSiteName(nextTrip.listingSiteName ?? "");
 
@@ -227,8 +235,14 @@ export default function TripSettingsPage() {
       if (listingChanged) {
         payload.listingTitle = null;
         payload.listingImageUrl = null;
+        payload.listingLocationCity = null;
+        payload.listingLocationState = null;
+        payload.listingLocationLabel = null;
         payload.listingDescription = null;
         payload.listingSiteName = null;
+        payload.listingBedrooms = null;
+        payload.listingBeds = null;
+        payload.listingBaths = null;
       }
 
       if (trip.status === "draft") {
@@ -242,6 +256,7 @@ export default function TripSettingsPage() {
       if (listingChanged) {
         setListingTitle("");
         setListingImageUrl("");
+        setListingLocationLabel("");
         setListingDescription("");
         setListingSiteName("");
       }
@@ -279,11 +294,15 @@ export default function TripSettingsPage() {
 
       const nextTitle = pulled.listingTitle ?? "";
       const nextImageUrl = pulled.listingImageUrl ?? "";
+      const nextLocationCity = pulled.listingLocationCity;
+      const nextLocationState = pulled.listingLocationState;
+      const nextLocationLabel = pulled.listingLocationLabel ?? "";
       const nextDescription = "";
       const resolvedSite = extractHostname(listingUrlValue) ?? "";
 
       setListingTitle(nextTitle);
       setListingImageUrl(nextImageUrl);
+      setListingLocationLabel(nextLocationLabel);
       setListingDescription(nextDescription);
       setListingSiteName(resolvedSite);
 
@@ -291,6 +310,9 @@ export default function TripSettingsPage() {
         listingUrl: listingUrlValue,
         listingTitle: nextTitle || null,
         listingImageUrl: nextImageUrl || null,
+        listingLocationCity: nextLocationCity,
+        listingLocationState: nextLocationState,
+        listingLocationLabel: nextLocationLabel || null,
         listingDescription: nextDescription || null,
         listingSiteName: resolvedSite || null,
         listingBedrooms: pulled.listingBedrooms,
@@ -302,6 +324,7 @@ export default function TripSettingsPage() {
       if (
         !nextTitle &&
         !nextImageUrl &&
+        !nextLocationLabel &&
         pulled.listingBedrooms === null &&
         pulled.listingBeds === null &&
         pulled.listingBaths === null
@@ -595,7 +618,7 @@ export default function TripSettingsPage() {
 
           {previewError ? <div className="notice">{previewError}</div> : null}
 
-          {(listingTitle || listingImageUrl || listingDescription || listingSiteName || listingUrl) && (
+          {(listingTitle || listingImageUrl || listingLocationLabel || listingDescription || listingSiteName || listingUrl) && (
             <div className="list-item" style={{ display: "grid", gap: 10 }}>
               {listingImageUrl ? (
                 <img
@@ -616,6 +639,11 @@ export default function TripSettingsPage() {
                   Listing preview
                 </div>
                 <div>{listingTitle || "Title unavailable"}</div>
+                {listingLocationLabel ? (
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {listingLocationLabel}
+                  </div>
+                ) : null}
                 {(listingSiteName || listingUrl) && (
                   <div className="muted" style={{ fontSize: 13 }}>
                     {listingSiteName || extractHostname(listingUrl) || ""}
