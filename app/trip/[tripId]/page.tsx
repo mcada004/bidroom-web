@@ -549,6 +549,7 @@ export default function TripPage() {
       status: "live",
       auctionStartAt: serverTimestamp(),
       auctionEndAt: new Date(endMs),
+      updatedAt: serverTimestamp(),
     });
   }
 
@@ -571,6 +572,7 @@ export default function TripPage() {
       status: "draft",
       auctionStartAt: null,
       auctionEndAt: null,
+      updatedAt: serverTimestamp(),
     });
     ops += 1;
 
@@ -625,7 +627,7 @@ export default function TripPage() {
       }
     }
 
-    batch.update(doc(db, "trips", tripId), { status: "ended" });
+    batch.update(doc(db, "trips", tripId), { status: "ended", updatedAt: serverTimestamp() });
     await batch.commit();
   }
 
@@ -650,7 +652,7 @@ export default function TripPage() {
 
     setBusyAdmin(true);
     try {
-      await updateDoc(doc(db, "trips", tripId), { auctionEndAt: new Date() });
+      await updateDoc(doc(db, "trips", tripId), { auctionEndAt: new Date(), updatedAt: serverTimestamp() });
       await finalizeAuctionCore();
       alert("Auction ended + finalized.");
     } catch (e: any) {

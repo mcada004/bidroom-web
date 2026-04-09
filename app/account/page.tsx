@@ -4,21 +4,16 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateProfile } from "firebase/auth";
 import {
-  collectionGroup,
+  collection,
   doc,
-  documentId,
+  getDoc,
   getDocs,
-  query,
   serverTimestamp,
   setDoc,
-  where,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
 import { normalizeDisplayName } from "@/src/lib/authGuests";
-
-const MAX_BATCH_WRITES = 400;
 
 type SaveState =
   | { kind: "idle"; message: null }
@@ -60,28 +55,27 @@ export default function AccountPage() {
   }, [loading, user, router, suggestedName, seedUid]);
 
   async function syncTripMemberDisplayNames(uid: string, nextDisplayName: string) {
-    const membersQuery = query(collectionGroup(db, "members"), where(documentId(), "==", uid));
-    const membersSnap = await getDocs(membersQuery);
+    const myTripsSnap = await getDocs(collection(db, "users", uid, "myTrips"));
 
-    let batch = writeBatch(db);
-    let writesInBatch = 0;
+    for (const tripDoc of myTripsSnap.docs) {
+      const tripId = tripDoc.id;
+      const memberRef = doc(db, "trips", tripId, "members", uid);
 
-    for (const memberDoc of membersSnap.docs) {
-      const tripRef = memberDoc.ref.parent.parent;
-      if (!tripRef || tripRef.parent.id !== "trips") continue;
+      try {
+        const memberSnap = await getDoc(memberRef);
+        if (!memberSnap.exists()) continue;
 
-      batch.set(memberDoc.ref, { displayName: nextDisplayName }, { merge: true });
-      writesInBatch += 1;
+        const existingData = memberSnap.data() as { role?: unknown };
+        const role = existingData.role === "manager" ? "manager" : "participant";
 
-      if (writesInBatch >= MAX_BATCH_WRITES) {
-        await batch.commit();
-        batch = writeBatch(db);
-        writesInBatch = 0;
+        await setDoc(memberRef, {
+          displayName: nextDisplayName,
+          role,
+          joinedAt: serverTimestamp(),
+        });
+      } catch {
+        // Skip trips where update fails (e.g., banned from trip)
       }
-    }
-
-    if (writesInBatch > 0) {
-      await batch.commit();
     }
   }
 
