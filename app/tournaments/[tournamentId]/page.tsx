@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { doc, onSnapshot, runTransaction } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { db } from "@/src/lib/firebase";
 import {
@@ -11,7 +11,9 @@ import {
   coerceTournamentDocument,
   getPlayerById,
   getTeamById,
+  getTournamentSharePath,
   resetBracket,
+  validateSeriesScore,
   type MatchId,
   type TournamentDocument,
   type TournamentMatch,
@@ -97,7 +99,7 @@ export default function TournamentPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setShareUrl(window.location.href);
+    setShareUrl(`${window.location.origin}${getTournamentSharePath(tournamentId)}`);
   }, [tournamentId]);
 
   useEffect(() => {
@@ -138,46 +140,47 @@ export default function TournamentPage() {
   }
 
   async function saveMatch(matchId: MatchId) {
-    if (!user || !tournament || !isOwner) return;
+    if (!user || !tournament || !isOwner) {
+      setActionError("Only the tournament creator can save results.");
+      return;
+    }
 
-    const score1 = Number(scoreInputs[matchId].score1);
-    const score2 = Number(scoreInputs[matchId].score2);
+    const match = tournament.bracket.matches.find((candidate) => candidate.id === matchId);
+    if (!match) {
+      setActionError("Match not found.");
+      return;
+    }
+
+    if (!match.teamIds[0] || !match.teamIds[1]) {
+      setActionError("Both teams must be assigned before you can save a result.");
+      return;
+    }
+
+    const score1 = Number(scoreInputs[matchId]?.score1 ?? "");
+    const score2 = Number(scoreInputs[matchId]?.score2 ?? "");
+    const validation = validateSeriesScore(match.bestOf, score1, score2);
+    if (!validation.valid) {
+      setActionError(validation.message);
+      return;
+    }
 
     setSavingMatchId(matchId);
     setActionNotice(null);
     setActionError(null);
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const tournamentRef = doc(db, "tournaments", tournamentId);
-        const snapshot = await transaction.get(tournamentRef);
+      const nextState = applyMatchResult({
+        teams: tournament.teams,
+        bracket: tournament.bracket,
+        matchId,
+        score1,
+        score2,
+      });
 
-        if (!snapshot.exists()) {
-          throw new Error("Tournament not found.");
-        }
-
-        const latestTournament = coerceTournamentDocument(snapshot.data());
-        if (!latestTournament) {
-          throw new Error("Tournament data is invalid.");
-        }
-
-        if (latestTournament.ownerId !== user.uid) {
-          throw new Error("Only the tournament creator can edit results.");
-        }
-
-        const nextState = applyMatchResult({
-          teams: latestTournament.teams,
-          bracket: latestTournament.bracket,
-          matchId,
-          score1,
-          score2,
-        });
-
-        transaction.update(tournamentRef, {
-          bracket: nextState.bracket,
-          status: nextState.status,
-          updatedAt: new Date(),
-        });
+      await updateDoc(doc(db, "tournaments", tournamentId), {
+        bracket: nextState.bracket,
+        status: nextState.status,
+        updatedAt: new Date(),
       });
 
       const matchName = matchesById.get(matchId)?.roundName ?? "Match";
@@ -204,30 +207,12 @@ export default function TournamentPage() {
     setActionError(null);
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const tournamentRef = doc(db, "tournaments", tournamentId);
-        const snapshot = await transaction.get(tournamentRef);
+      const nextState = resetBracket(tournament.teams);
 
-        if (!snapshot.exists()) {
-          throw new Error("Tournament not found.");
-        }
-
-        const latestTournament = coerceTournamentDocument(snapshot.data());
-        if (!latestTournament) {
-          throw new Error("Tournament data is invalid.");
-        }
-
-        if (latestTournament.ownerId !== user.uid) {
-          throw new Error("Only the tournament creator can reset this bracket.");
-        }
-
-        const nextState = resetBracket(latestTournament.teams);
-
-        transaction.update(tournamentRef, {
-          bracket: nextState.bracket,
-          status: nextState.status,
-          updatedAt: new Date(),
-        });
+      await updateDoc(doc(db, "tournaments", tournamentId), {
+        bracket: nextState.bracket,
+        status: nextState.status,
+        updatedAt: new Date(),
       });
 
       setActionNotice("Tournament reset.");
@@ -376,6 +361,9 @@ export default function TournamentPage() {
         <article className="card">
           <div className="section-title">Share link</div>
           <div className="code-block">{shareUrl || "Loading link…"}</div>
+          <p className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+            Anyone with this link can view the tournament without signing in.
+          </p>
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" className="button secondary" onClick={copyShareLink}>
               {copyState === "copied" ? "Copied!" : "Copy link"}
@@ -416,6 +404,21 @@ function MatchCard({
   const team1 = getTeamById(tournament.teams, match.teamIds[0]);
   const team2 = getTeamById(tournament.teams, match.teamIds[1]);
   const hasTeams = Boolean(team1 && team2);
+  const parsedScore1 = score1 === "" ? null : Number(score1);
+  const parsedScore2 = score2 === "" ? null : Number(score2);
+  const scoreValidation =
+    hasTeams && parsedScore1 !== null && parsedScore2 !== null
+      ? validateSeriesScore(match.bestOf, parsedScore1, parsedScore2)
+      : null;
+  const scoreHint =
+    match.bestOf === 3 ? "Enter the final series score, like 2-0 or 2-1." : "Enter the final series score, like 3-0, 3-1, or 3-2.";
+  const canSave =
+    hasTeams &&
+    isOwner &&
+    !busy &&
+    parsedScore1 !== null &&
+    parsedScore2 !== null &&
+    scoreValidation?.valid === true;
 
   const nextSteps: string[] = [];
   if (match.nextWinnerMatchId) {
@@ -491,7 +494,11 @@ function MatchCard({
             </label>
           </div>
 
-          <button type="button" className="button" onClick={() => onSave(match.id)} disabled={busy}>
+          <div className="muted" style={{ fontSize: 13 }}>
+            {scoreValidation && !scoreValidation.valid ? scoreValidation.message : scoreHint}
+          </div>
+
+          <button type="button" className="button" onClick={() => onSave(match.id)} disabled={!canSave}>
             {busy ? "Saving…" : match.status === "completed" ? "Update result" : "Save result"}
           </button>
         </div>

@@ -9,6 +9,7 @@ import { db } from "@/src/lib/firebase";
 import {
   coerceTournamentDocument,
   getTeamById,
+  getTournamentSharePath,
   type TournamentStatus,
 } from "@/src/lib/tournaments";
 
@@ -37,6 +38,8 @@ export default function TournamentsPage() {
   const { user, loading } = useAuth();
   const [entries, setEntries] = useState<TournamentListEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [copyStateById, setCopyStateById] = useState<Record<string, "idle" | "copied">>({});
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || user) return;
@@ -81,6 +84,33 @@ export default function TournamentsPage() {
     return () => unsubscribe();
   }, [user]);
 
+  useEffect(() => {
+    const copiedId = Object.entries(copyStateById).find(([, state]) => state === "copied")?.[0];
+    if (!copiedId) return;
+
+    const timeout = window.setTimeout(() => {
+      setCopyStateById((current) => ({ ...current, [copiedId]: "idle" }));
+    }, 1800);
+
+    return () => window.clearTimeout(timeout);
+  }, [copyStateById]);
+
+  async function copyShareLink(tournamentId: string) {
+    if (typeof window === "undefined" || !window.navigator?.clipboard?.writeText) {
+      setCopyError("Couldn't copy automatically. Copy the link from the tournament page.");
+      return;
+    }
+
+    try {
+      const shareUrl = `${window.location.origin}${getTournamentSharePath(tournamentId)}`;
+      await window.navigator.clipboard.writeText(shareUrl);
+      setCopyStateById((current) => ({ ...current, [tournamentId]: "copied" }));
+      setCopyError(null);
+    } catch {
+      setCopyError("Couldn't copy automatically. Copy the link from the tournament page.");
+    }
+  }
+
   if (loading) return <main className="page">Loading…</main>;
   if (!user) return <main className="page">Redirecting to sign in…</main>;
 
@@ -99,6 +129,7 @@ export default function TournamentsPage() {
       </section>
 
       {error ? <p className="notice">{error}</p> : null}
+      {copyError ? <p className="notice">{copyError}</p> : null}
 
       {entries.length === 0 ? (
         <section className="card" style={{ maxWidth: 680, margin: "0 auto" }}>
@@ -123,14 +154,23 @@ export default function TournamentsPage() {
                     <div className="muted">
                       {entry.game} • {entry.format}
                     </div>
-                    <div className="row">
+                  <div className="row">
                       <span className={`status-pill ${entry.status}`}>{entry.status}</span>
                       {entry.championName ? <span className="pill">Winner: {entry.championName}</span> : null}
                     </div>
                   </div>
-                  <Link className="button secondary" href={`/tournaments/${entry.id}`}>
-                    Open
-                  </Link>
+                  <div className="row" style={{ justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="button ghost"
+                      onClick={() => copyShareLink(entry.id)}
+                    >
+                      {copyStateById[entry.id] === "copied" ? "Copied!" : "Copy share link"}
+                    </button>
+                    <Link className="button secondary" href={`/tournaments/${entry.id}`}>
+                      Open
+                    </Link>
+                  </div>
                 </div>
               </li>
             ))}

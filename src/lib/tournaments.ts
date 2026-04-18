@@ -592,3 +592,7 @@ export function getPlayerById(players: TournamentPlayer[], playerId: string) {
 export function getDefaultTournamentSeedNames() {
   return [...DEFAULT_PLAYER_NAMES];
 }
+
+export function getTournamentSharePath(tournamentId: string) {
+  return `/tournaments/${tournamentId}`;
+}
