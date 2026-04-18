@@ -260,6 +260,156 @@ main {
   font-size: 14px;
 }
 
+.tournament-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tournament-seed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.team-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: white;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.team-card-name {
+  font-weight: 600;
+}
+
+.tournament-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.match-group {
+  display: grid;
+  gap: 12px;
+}
+
+.match-list {
+  display: grid;
+  gap: 14px;
+}
+
+.match-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  background: white;
+  display: grid;
+  gap: 14px;
+}
+
+.match-card.pending {
+  background: #fffdfb;
+}
+
+.match-card.live {
+  border-color: #e8c78e;
+}
+
+.match-card.completed {
+  border-color: #cfdccd;
+}
+
+.match-team-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--paper-strong);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.match-team-row.winner {
+  background: #f2fbf3;
+  border-color: #bfd5c2;
+}
+
+.match-team-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.match-score {
+  font-size: 24px;
+  font-weight: 700;
+  min-width: 20px;
+  text-align: right;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.status-pill.pending {
+  color: var(--muted);
+  background: var(--paper-strong);
+}
+
+.status-pill.live {
+  color: #7d4f12;
+  background: #fff4e2;
+  border-color: #efd1a0;
+}
+
+.status-pill.completed {
+  color: #245f34;
+  background: #eef8ef;
+  border-color: #c9dccd;
+}
+
+@media (max-width: 780px) {
+  .app-shell {
+    padding: 24px 16px 56px;
+  }
+
+  .top-nav {
+    margin-bottom: 28px;
+  }
+
+  .tournament-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .score-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .app-shell {
     padding: 28px 18px 64px;

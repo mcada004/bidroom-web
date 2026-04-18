@@ -20,6 +20,55 @@ service cloud.firestore {
         tripDoc(tripId).data.bannedUids.hasAny([request.auth.uid]);
     }
 
+    function tournamentDoc(tournamentId) {
+      return get(/databases/$(database)/documents/tournaments/$(tournamentId));
+    }
+
+    function isTournamentOwner(tournamentId) {
+      return isSignedIn() && tournamentDoc(tournamentId).data.ownerId == request.auth.uid;
+    }
+
+    function hasValidTournamentShape(data) {
+      return data.keys().hasOnly([
+          "title",
+          "game",
+          "format",
+          "numberOfPlayers",
+          "ownerId",
+          "isPublic",
+          "players",
+          "teams",
+          "settings",
+          "bracket",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]) &&
+        data.title is string &&
+        data.title.size() > 0 &&
+        data.title.size() <= 120 &&
+        data.game is string &&
+        data.game.size() > 0 &&
+        data.game.size() <= 120 &&
+        data.format is string &&
+        data.format.size() > 0 &&
+        data.format.size() <= 120 &&
+        data.ownerId is string &&
+        data.ownerId.size() > 0 &&
+        data.isPublic is bool &&
+        data.numberOfPlayers is number &&
+        data.numberOfPlayers == 8 &&
+        data.players is list &&
+        data.players.size() == 8 &&
+        data.teams is list &&
+        data.teams.size() == 4 &&
+        data.settings is map &&
+        data.bracket is map &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (data.status == "pending" || data.status == "live" || data.status == "completed");
+    }
+
     function isValidMemberPayload(tripId, memberUid) {
       return request.resource.data.keys().hasOnly(["displayName", "role", "joinedAt"]) &&
         request.resource.data.displayName is string &&
@@ -220,6 +269,21 @@ service cloud.firestore {
         // Manager or self can remove a membership record.
         allow delete: if isTripManager(tripId) || (isSignedIn() && !isBanned(tripId) && request.auth.uid == memberUid);
       }
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        hasValidTournamentShape(request.resource.data);
+
+      allow update: if isTournamentOwner(tournamentId) &&
+        hasValidTournamentShape(request.resource.data) &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if isTournamentOwner(tournamentId);
     }
 
     match /users/{uid} {

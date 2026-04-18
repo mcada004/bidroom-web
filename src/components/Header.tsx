@@ -30,6 +30,9 @@ export default function Header() {
             <Link className="pill" href="/create-trip">
               Create Trip
             </Link>
+            <Link className="pill" href="/tournaments/new">
+              Tournaments
+            </Link>
             <Link className="pill" href="/account">
               My Account
             </Link>
