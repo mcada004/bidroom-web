@@ -42,11 +42,14 @@ service cloud.firestore {
         data.ownerId.size() > 0 &&
         data.isPublic is bool &&
         data.numberOfPlayers is number &&
-        data.numberOfPlayers == 8 &&
+        data.numberOfPlayers >= 4 &&
+        data.numberOfPlayers <= 16 &&
+        data.numberOfPlayers % 2 == 0 &&
         data.players is list &&
-        data.players.size() == 8 &&
+        data.players.size() == data.numberOfPlayers &&
         data.teams is list &&
-        data.teams.size() == 4 &&
+        data.teams.size() >= 2 &&
+        data.teams.size() <= 8 &&
         data.settings is map &&
         data.bracket is map &&
         (data.status == "pending" || data.status == "live" || data.status == "completed");

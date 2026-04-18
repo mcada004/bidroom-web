@@ -12,17 +12,15 @@ export const DEFAULT_PLAYER_NAMES = [
   "Moran",
 ] as const;
 
+export const TOURNAMENT_TEAM_SIZE = 2;
+export const MIN_TEAM_COUNT = 2;
+export const MAX_TEAM_COUNT = 8;
+
 export type TournamentStatus = "pending" | "live" | "completed";
 export type MatchStatus = "pending" | "live" | "completed";
-export type MatchBracket = "winners" | "losers" | "finals";
-export type MatchId =
-  | "wb-semi-1"
-  | "wb-semi-2"
-  | "lb-elim"
-  | "wb-final"
-  | "lb-final"
-  | "grand-final"
-  | "grand-final-reset";
+export type TournamentBracketType = "double_elimination" | "single_elimination";
+export type MatchBracket = "winners" | "losers" | "finals" | "single";
+export type MatchId = string;
 
 export type TournamentPlayer = {
   id: string;
@@ -53,15 +51,23 @@ export type TournamentMatch = {
   nextLoserMatchId: MatchId | null;
 };
 
+export type TournamentBracketGroup = {
+  title: string;
+  matchIds: MatchId[];
+};
+
 export type TournamentBracket = {
   matches: TournamentMatch[];
+  groups: TournamentBracketGroup[];
   championTeamId: string | null;
   requiresGrandFinalReset: boolean;
+  bracketType: TournamentBracketType;
 };
 
 export type TournamentSettings = {
   teamSize: 2;
-  bracketType: "double_elimination";
+  teamCount: number;
+  bracketType: TournamentBracketType;
   allowGrandFinalReset: boolean;
 };
 
@@ -79,33 +85,21 @@ export type TournamentDocument = {
   bracket: TournamentBracket;
 };
 
-export const TOURNAMENT_MATCH_GROUPS: Array<{
-  title: string;
-  matchIds: MatchId[];
-}> = [
-  {
-    title: "Winners bracket",
-    matchIds: ["wb-semi-1", "wb-semi-2", "wb-final"],
-  },
-  {
-    title: "Losers bracket",
-    matchIds: ["lb-elim", "lb-final"],
-  },
-  {
-    title: "Finals",
-    matchIds: ["grand-final", "grand-final-reset"],
-  },
-];
+type MatchTemplate = {
+  id: MatchId;
+  roundName: string;
+  groupTitle: string;
+  bracket: MatchBracket;
+  bestOf: 3 | 5;
+  nextWinnerMatchId: MatchId | null;
+  nextLoserMatchId: MatchId | null;
+};
 
-type MatchMeta = Omit<
-  TournamentMatch,
-  "teamIds" | "winnerTeamId" | "loserTeamId" | "score1" | "score2" | "status"
->;
-
-const MATCHES: MatchMeta[] = [
+const DOUBLE_ELIM_MATCHES: MatchTemplate[] = [
   {
     id: "wb-semi-1",
     roundName: "WB Semifinal 1",
+    groupTitle: "Winners bracket",
     bracket: "winners",
     bestOf: 3,
     nextWinnerMatchId: "wb-final",
@@ -114,6 +108,7 @@ const MATCHES: MatchMeta[] = [
   {
     id: "wb-semi-2",
     roundName: "WB Semifinal 2",
+    groupTitle: "Winners bracket",
     bracket: "winners",
     bestOf: 3,
     nextWinnerMatchId: "wb-final",
@@ -122,6 +117,7 @@ const MATCHES: MatchMeta[] = [
   {
     id: "lb-elim",
     roundName: "LB Elimination",
+    groupTitle: "Losers bracket",
     bracket: "losers",
     bestOf: 3,
     nextWinnerMatchId: "lb-final",
@@ -130,6 +126,7 @@ const MATCHES: MatchMeta[] = [
   {
     id: "wb-final",
     roundName: "Winners Final",
+    groupTitle: "Winners bracket",
     bracket: "winners",
     bestOf: 5,
     nextWinnerMatchId: "grand-final",
@@ -138,6 +135,7 @@ const MATCHES: MatchMeta[] = [
   {
     id: "lb-final",
     roundName: "Losers Final",
+    groupTitle: "Losers bracket",
     bracket: "losers",
     bestOf: 5,
     nextWinnerMatchId: "grand-final",
@@ -146,6 +144,7 @@ const MATCHES: MatchMeta[] = [
   {
     id: "grand-final",
     roundName: "Grand Final",
+    groupTitle: "Finals",
     bracket: "finals",
     bestOf: 5,
     nextWinnerMatchId: null,
@@ -154,6 +153,7 @@ const MATCHES: MatchMeta[] = [
   {
     id: "grand-final-reset",
     roundName: "Grand Final Reset",
+    groupTitle: "Finals",
     bracket: "finals",
     bestOf: 5,
     nextWinnerMatchId: null,
@@ -161,8 +161,8 @@ const MATCHES: MatchMeta[] = [
   },
 ];
 
-function getMatchMeta(matchId: MatchId) {
-  return MATCHES.find((match) => match.id === matchId) ?? null;
+function getDoubleElimTemplate(matchId: MatchId) {
+  return DOUBLE_ELIM_MATCHES.find((match) => match.id === matchId) ?? null;
 }
 
 function createPlayerId(seed: number) {
@@ -180,8 +180,289 @@ function teamIdsEqual(
   return left[0] === right[0] && left[1] === right[1];
 }
 
+function nextPowerOfTwo(value: number) {
+  let out = 1;
+  while (out < value) out *= 2;
+  return out;
+}
+
+function buildSeedOrder(size: number): number[] {
+  if (size <= 2) return [1, 2];
+  const previous = buildSeedOrder(size / 2);
+  return previous.flatMap((seed) => [seed, size + 1 - seed]);
+}
+
+function getSingleElimRoundName(matchesInRound: number) {
+  if (matchesInRound === 1) return "Grand Final";
+  if (matchesInRound === 2) return "Semifinals";
+  if (matchesInRound === 4) return "Quarterfinals";
+  if (matchesInRound === 8) return "Round of 16";
+  return `Round of ${matchesInRound * 2}`;
+}
+
+function createPendingOrLiveMatch(
+  template: MatchTemplate,
+  teamIds: [string | null, string | null]
+): TournamentMatch {
+  return {
+    id: template.id,
+    roundName: template.roundName,
+    bracket: template.bracket,
+    bestOf: template.bestOf,
+    teamIds,
+    winnerTeamId: null,
+    loserTeamId: null,
+    score1: null,
+    score2: null,
+    status: teamIds[0] && teamIds[1] ? "live" : "pending",
+    nextWinnerMatchId: template.nextWinnerMatchId,
+    nextLoserMatchId: template.nextLoserMatchId,
+  };
+}
+
+function createAutoAdvancedMatch(
+  template: MatchTemplate,
+  teamIds: [string | null, string | null]
+): TournamentMatch {
+  const winnerTeamId = teamIds[0] ?? teamIds[1];
+
+  return {
+    id: template.id,
+    roundName: template.roundName,
+    bracket: template.bracket,
+    bestOf: template.bestOf,
+    teamIds,
+    winnerTeamId,
+    loserTeamId: null,
+    score1: null,
+    score2: null,
+    status: winnerTeamId ? "completed" : "pending",
+    nextWinnerMatchId: template.nextWinnerMatchId,
+    nextLoserMatchId: template.nextLoserMatchId,
+  };
+}
+
+function createCompletedMatch(
+  template: MatchTemplate,
+  teamIds: [string, string],
+  score1: number,
+  score2: number
+): TournamentMatch {
+  const validation = validateSeriesScore(template.bestOf, score1, score2);
+  if (!validation.valid) {
+    return createPendingOrLiveMatch(template, teamIds);
+  }
+
+  const winnerTeamId = teamIds[validation.winnerIndex];
+  const loserTeamId = teamIds[validation.winnerIndex === 0 ? 1 : 0];
+
+  return {
+    id: template.id,
+    roundName: template.roundName,
+    bracket: template.bracket,
+    bestOf: template.bestOf,
+    teamIds,
+    winnerTeamId,
+    loserTeamId,
+    score1,
+    score2,
+    status: "completed",
+    nextWinnerMatchId: template.nextWinnerMatchId,
+    nextLoserMatchId: template.nextLoserMatchId,
+  };
+}
+
+function rehydrateMatch(
+  template: MatchTemplate,
+  teamIds: [string | null, string | null],
+  previousMap: Map<MatchId, TournamentMatch>
+) {
+  if ((teamIds[0] && !teamIds[1]) || (!teamIds[0] && teamIds[1])) {
+    return createAutoAdvancedMatch(template, teamIds);
+  }
+
+  const previous = previousMap.get(template.id);
+  if (
+    previous &&
+    teamIds[0] &&
+    teamIds[1] &&
+    teamIdsEqual(teamIds, previous.teamIds) &&
+    typeof previous.score1 === "number" &&
+    typeof previous.score2 === "number"
+  ) {
+    return createCompletedMatch(template, [teamIds[0], teamIds[1]], previous.score1, previous.score2);
+  }
+
+  return createPendingOrLiveMatch(template, teamIds);
+}
+
+function buildGroupsFromTemplates(templates: MatchTemplate[]) {
+  const groups = new Map<string, MatchId[]>();
+
+  for (const template of templates) {
+    groups.set(template.groupTitle, [...(groups.get(template.groupTitle) ?? []), template.id]);
+  }
+
+  return Array.from(groups.entries()).map(([title, matchIds]) => ({ title, matchIds }));
+}
+
+function deriveDoubleEliminationBracket(
+  teams: TournamentTeam[],
+  previousMatches: TournamentMatch[]
+): TournamentBracket {
+  const previousMap = new Map(previousMatches.map((match) => [match.id, match]));
+  const team1 = teams[0]?.id ?? null;
+  const team2 = teams[1]?.id ?? null;
+  const team3 = teams[2]?.id ?? null;
+  const team4 = teams[3]?.id ?? null;
+
+  const wbSemi1 = rehydrateMatch(
+    getDoubleElimTemplate("wb-semi-1")!,
+    [team1, team4],
+    previousMap
+  );
+  const wbSemi2 = rehydrateMatch(
+    getDoubleElimTemplate("wb-semi-2")!,
+    [team2, team3],
+    previousMap
+  );
+  const lbElim = rehydrateMatch(
+    getDoubleElimTemplate("lb-elim")!,
+    [wbSemi1.loserTeamId, wbSemi2.loserTeamId],
+    previousMap
+  );
+  const wbFinal = rehydrateMatch(
+    getDoubleElimTemplate("wb-final")!,
+    [wbSemi1.winnerTeamId, wbSemi2.winnerTeamId],
+    previousMap
+  );
+  const lbFinal = rehydrateMatch(
+    getDoubleElimTemplate("lb-final")!,
+    [wbFinal.loserTeamId, lbElim.winnerTeamId],
+    previousMap
+  );
+  const grandFinal = rehydrateMatch(
+    getDoubleElimTemplate("grand-final")!,
+    [wbFinal.winnerTeamId, lbFinal.winnerTeamId],
+    previousMap
+  );
+
+  const resetTriggered =
+    grandFinal.status === "completed" &&
+    grandFinal.teamIds[1] !== null &&
+    grandFinal.winnerTeamId === grandFinal.teamIds[1];
+
+  const grandFinalReset = rehydrateMatch(
+    getDoubleElimTemplate("grand-final-reset")!,
+    resetTriggered ? grandFinal.teamIds : [null, null],
+    previousMap
+  );
+
+  const championTeamId =
+    grandFinalReset.status === "completed"
+      ? grandFinalReset.winnerTeamId
+      : grandFinal.status === "completed" && !resetTriggered
+        ? grandFinal.winnerTeamId
+        : null;
+
+  return {
+    matches: [
+      wbSemi1,
+      wbSemi2,
+      lbElim,
+      wbFinal,
+      lbFinal,
+      grandFinal,
+      grandFinalReset,
+    ],
+    groups: buildGroupsFromTemplates(DOUBLE_ELIM_MATCHES),
+    championTeamId,
+    requiresGrandFinalReset: resetTriggered,
+    bracketType: "double_elimination",
+  };
+}
+
+function deriveSingleEliminationBracket(
+  teams: TournamentTeam[],
+  previousMatches: TournamentMatch[]
+): TournamentBracket {
+  const previousMap = new Map(previousMatches.map((match) => [match.id, match]));
+  const bracketSize = nextPowerOfTwo(teams.length);
+  const seedOrder = buildSeedOrder(bracketSize);
+  const teamBySeed = new Map(teams.map((team) => [team.seed, team.id]));
+  let roundEntries = seedOrder.map((seed) => teamBySeed.get(seed) ?? null);
+  const allMatches: TournamentMatch[] = [];
+  const groups: TournamentBracketGroup[] = [];
+  const totalRounds = Math.log2(bracketSize);
+
+  for (let roundIndex = 0; roundIndex < totalRounds; roundIndex += 1) {
+    const matchesInRound = roundEntries.length / 2;
+    const roundName = getSingleElimRoundName(matchesInRound);
+    const roundMatches: TournamentMatch[] = [];
+
+    for (let matchIndex = 0; matchIndex < matchesInRound; matchIndex += 1) {
+      const id = `single-r${roundIndex + 1}-m${matchIndex + 1}`;
+      const nextWinnerMatchId =
+        roundIndex < totalRounds - 1
+          ? `single-r${roundIndex + 2}-m${Math.floor(matchIndex / 2) + 1}`
+          : null;
+
+      const template: MatchTemplate = {
+        id,
+        roundName,
+        groupTitle: roundName,
+        bracket: "single",
+        bestOf: roundIndex === totalRounds - 1 ? 5 : 3,
+        nextWinnerMatchId,
+        nextLoserMatchId: null,
+      };
+
+      const match = rehydrateMatch(
+        template,
+        [roundEntries[matchIndex * 2] ?? null, roundEntries[matchIndex * 2 + 1] ?? null],
+        previousMap
+      );
+      roundMatches.push(match);
+      allMatches.push(match);
+    }
+
+    groups.push({ title: roundName, matchIds: roundMatches.map((match) => match.id) });
+    roundEntries = roundMatches.map((match) => match.winnerTeamId);
+  }
+
+  const championTeamId = allMatches[allMatches.length - 1]?.winnerTeamId ?? null;
+
+  return {
+    matches: allMatches,
+    groups,
+    championTeamId,
+    requiresGrandFinalReset: false,
+    bracketType: "single_elimination",
+  };
+}
+
+export function getBracketTypeForTeamCount(teamCount: number): TournamentBracketType {
+  return teamCount === 4 ? "double_elimination" : "single_elimination";
+}
+
+export function getTeamCountFromPlayerCount(playerCount: number) {
+  return Math.max(MIN_TEAM_COUNT, Math.floor(playerCount / TOURNAMENT_TEAM_SIZE));
+}
+
 export function trimPlayerNames(names: string[]) {
   return names.map((name) => name.trim());
+}
+
+export function resizePlayerNames(names: string[], teamCount: number) {
+  const clampedTeamCount = Math.max(MIN_TEAM_COUNT, Math.min(MAX_TEAM_COUNT, teamCount));
+  const targetCount = clampedTeamCount * TOURNAMENT_TEAM_SIZE;
+  const next = trimPlayerNames(names).slice(0, targetCount);
+
+  while (next.length < targetCount) {
+    next.push(DEFAULT_PLAYER_NAMES[next.length] ?? "");
+  }
+
+  return next;
 }
 
 export function createRankedPlayers(names: string[]): TournamentPlayer[] {
@@ -193,7 +474,7 @@ export function createRankedPlayers(names: string[]): TournamentPlayer[] {
 }
 
 export function buildBalancedTeams(players: TournamentPlayer[]): TournamentTeam[] {
-  const pairs = Math.floor(players.length / 2);
+  const pairs = Math.floor(players.length / TOURNAMENT_TEAM_SIZE);
   const teams: TournamentTeam[] = [];
 
   for (let index = 0; index < pairs; index += 1) {
@@ -254,153 +535,46 @@ export function validateSeriesScore(bestOf: 3 | 5, score1: number, score2: numbe
   };
 }
 
-function createPendingOrLiveMatch(
-  meta: MatchMeta,
-  teamIds: [string | null, string | null]
-): TournamentMatch {
-  return {
-    ...meta,
-    teamIds,
-    winnerTeamId: null,
-    loserTeamId: null,
-    score1: null,
-    score2: null,
-    status: teamIds[0] && teamIds[1] ? "live" : "pending",
-  };
-}
-
-function createCompletedMatch(
-  meta: MatchMeta,
-  teamIds: [string, string],
-  score1: number,
-  score2: number
-): TournamentMatch {
-  const validation = validateSeriesScore(meta.bestOf, score1, score2);
-  if (!validation.valid) {
-    return createPendingOrLiveMatch(meta, teamIds);
-  }
-
-  const winnerTeamId = teamIds[validation.winnerIndex];
-  const loserTeamId = teamIds[validation.winnerIndex === 0 ? 1 : 0];
-
-  return {
-    ...meta,
-    teamIds,
-    winnerTeamId,
-    loserTeamId,
-    score1,
-    score2,
-    status: "completed",
-  };
-}
-
-function rehydrateMatch(
-  matchId: MatchId,
-  teamIds: [string | null, string | null],
-  previousMap: Map<MatchId, TournamentMatch>
-) {
-  const meta = getMatchMeta(matchId);
-  if (!meta) {
-    throw new Error(`Unknown match id: ${matchId}`);
-  }
-
-  const previous = previousMap.get(matchId);
-  if (
-    previous &&
-    teamIds[0] &&
-    teamIds[1] &&
-    teamIdsEqual(teamIds, previous.teamIds) &&
-    typeof previous.score1 === "number" &&
-    typeof previous.score2 === "number"
-  ) {
-    return createCompletedMatch(meta, [teamIds[0], teamIds[1]], previous.score1, previous.score2);
-  }
-
-  return createPendingOrLiveMatch(meta, teamIds);
-}
-
 export function deriveBracket(
   teams: TournamentTeam[],
-  previousMatches: TournamentMatch[] = []
+  previousMatches: TournamentMatch[] = [],
+  bracketType = getBracketTypeForTeamCount(teams.length)
 ): TournamentBracket {
-  const previousMap = new Map(previousMatches.map((match) => [match.id, match]));
-  const team1 = teams[0]?.id ?? null;
-  const team2 = teams[1]?.id ?? null;
-  const team3 = teams[2]?.id ?? null;
-  const team4 = teams[3]?.id ?? null;
+  if (bracketType === "double_elimination" && teams.length === 4) {
+    return deriveDoubleEliminationBracket(teams, previousMatches);
+  }
 
-  const wbSemi1 = rehydrateMatch("wb-semi-1", [team1, team4], previousMap);
-  const wbSemi2 = rehydrateMatch("wb-semi-2", [team2, team3], previousMap);
-
-  const lbElim = rehydrateMatch(
-    "lb-elim",
-    [wbSemi1.loserTeamId, wbSemi2.loserTeamId],
-    previousMap
-  );
-  const wbFinal = rehydrateMatch(
-    "wb-final",
-    [wbSemi1.winnerTeamId, wbSemi2.winnerTeamId],
-    previousMap
-  );
-  const lbFinal = rehydrateMatch(
-    "lb-final",
-    [wbFinal.loserTeamId, lbElim.winnerTeamId],
-    previousMap
-  );
-  const grandFinal = rehydrateMatch(
-    "grand-final",
-    [wbFinal.winnerTeamId, lbFinal.winnerTeamId],
-    previousMap
-  );
-
-  const resetTriggered =
-    grandFinal.status === "completed" &&
-    grandFinal.teamIds[1] !== null &&
-    grandFinal.winnerTeamId === grandFinal.teamIds[1];
-
-  const grandFinalReset = rehydrateMatch(
-    "grand-final-reset",
-    resetTriggered ? grandFinal.teamIds : [null, null],
-    previousMap
-  );
-
-  const championTeamId =
-    grandFinalReset.status === "completed"
-      ? grandFinalReset.winnerTeamId
-      : grandFinal.status === "completed" && !resetTriggered
-        ? grandFinal.winnerTeamId
-        : null;
-
-  return {
-    matches: [
-      wbSemi1,
-      wbSemi2,
-      lbElim,
-      wbFinal,
-      lbFinal,
-      grandFinal,
-      grandFinalReset,
-    ],
-    championTeamId,
-    requiresGrandFinalReset: resetTriggered,
-  };
+  return deriveSingleEliminationBracket(teams, previousMatches);
 }
 
 export function deriveTournamentStatus(bracket: TournamentBracket): TournamentStatus {
   if (bracket.championTeamId) return "completed";
-  if (bracket.matches.some((match) => match.status === "completed")) return "live";
+  if (
+    bracket.matches.some(
+      (match) => typeof match.score1 === "number" && typeof match.score2 === "number"
+    )
+  ) {
+    return "live";
+  }
   return "pending";
 }
 
 export function createInitialTournamentState(playerNames: string[]) {
   const players = createRankedPlayers(playerNames);
   const teams = buildBalancedTeams(players);
-  const bracket = deriveBracket(teams);
+  const bracketType = getBracketTypeForTeamCount(teams.length);
+  const bracket = deriveBracket(teams, [], bracketType);
 
   return {
     players,
     teams,
     bracket,
+    settings: {
+      teamSize: TOURNAMENT_TEAM_SIZE,
+      teamCount: teams.length,
+      bracketType,
+      allowGrandFinalReset: bracketType === "double_elimination",
+    } satisfies TournamentSettings,
     status: deriveTournamentStatus(bracket),
   };
 }
@@ -429,7 +603,7 @@ function coerceTeam(raw: unknown, index: number): TournamentTeam | null {
     ? record.playerIds.filter((value): value is string => typeof value === "string")
     : [];
 
-  if (playerIds.length !== 2) return null;
+  if (playerIds.length !== TOURNAMENT_TEAM_SIZE) return null;
 
   const label = asString(record.label) || `Team ${index + 1}`;
   const name = asString(record.name);
@@ -447,21 +621,9 @@ function coerceTeam(raw: unknown, index: number): TournamentTeam | null {
 function coerceMatch(raw: unknown): TournamentMatch | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
-  const matchId = record.id;
-  if (
-    matchId !== "wb-semi-1" &&
-    matchId !== "wb-semi-2" &&
-    matchId !== "lb-elim" &&
-    matchId !== "wb-final" &&
-    matchId !== "lb-final" &&
-    matchId !== "grand-final" &&
-    matchId !== "grand-final-reset"
-  ) {
-    return null;
-  }
-
-  const meta = getMatchMeta(matchId);
-  if (!meta) return null;
+  const id = asString(record.id);
+  const roundName = asString(record.roundName);
+  if (!id || !roundName) return null;
 
   const rawTeamIds = Array.isArray(record.teamIds) ? record.teamIds : [];
   const teamIds: [string | null, string | null] = [
@@ -470,7 +632,15 @@ function coerceMatch(raw: unknown): TournamentMatch | null {
   ];
 
   return {
-    ...meta,
+    id,
+    roundName,
+    bracket:
+      record.bracket === "winners" ||
+      record.bracket === "losers" ||
+      record.bracket === "finals"
+        ? record.bracket
+        : "single",
+    bestOf: record.bestOf === 5 ? 5 : 3,
     teamIds,
     winnerTeamId: typeof record.winnerTeamId === "string" ? record.winnerTeamId : null,
     loserTeamId: typeof record.loserTeamId === "string" ? record.loserTeamId : null,
@@ -478,6 +648,10 @@ function coerceMatch(raw: unknown): TournamentMatch | null {
     score2: typeof record.score2 === "number" ? record.score2 : null,
     status:
       record.status === "live" || record.status === "completed" ? record.status : "pending",
+    nextWinnerMatchId:
+      typeof record.nextWinnerMatchId === "string" ? record.nextWinnerMatchId : null,
+    nextLoserMatchId:
+      typeof record.nextLoserMatchId === "string" ? record.nextLoserMatchId : null,
   };
 }
 
@@ -497,8 +671,21 @@ export function coerceTournamentDocument(raw: unknown): TournamentDocument | nul
         .filter((team): team is TournamentTeam => Boolean(team))
     : [];
 
-  const teams = teamsFromDoc.length === 4 ? teamsFromDoc : buildBalancedTeams(players);
-  if (players.length !== 8 || teams.length !== 4) return null;
+  const teams = teamsFromDoc.length >= MIN_TEAM_COUNT ? teamsFromDoc : buildBalancedTeams(players);
+  if (players.length < MIN_TEAM_COUNT * TOURNAMENT_TEAM_SIZE || teams.length < MIN_TEAM_COUNT) {
+    return null;
+  }
+
+  const settingsRecord =
+    record.settings && typeof record.settings === "object"
+      ? (record.settings as Record<string, unknown>)
+      : null;
+
+  const bracketType =
+    settingsRecord?.bracketType === "double_elimination" ||
+    settingsRecord?.bracketType === "single_elimination"
+      ? settingsRecord.bracketType
+      : getBracketTypeForTeamCount(teams.length);
 
   const previousMatches =
     record.bracket &&
@@ -509,7 +696,7 @@ export function coerceTournamentDocument(raw: unknown): TournamentDocument | nul
           .filter((match): match is TournamentMatch => Boolean(match))
       : [];
 
-  const bracket = deriveBracket(teams, previousMatches);
+  const bracket = deriveBracket(teams, previousMatches, bracketType);
 
   return {
     title: asString(record.title) || DEFAULT_TOURNAMENT_TITLE,
@@ -526,9 +713,14 @@ export function coerceTournamentDocument(raw: unknown): TournamentDocument | nul
     players,
     teams,
     settings: {
-      teamSize: 2,
-      bracketType: "double_elimination",
-      allowGrandFinalReset: true,
+      teamSize: TOURNAMENT_TEAM_SIZE,
+      teamCount:
+        typeof settingsRecord?.teamCount === "number" ? settingsRecord.teamCount : teams.length,
+      bracketType,
+      allowGrandFinalReset:
+        typeof settingsRecord?.allowGrandFinalReset === "boolean"
+          ? settingsRecord.allowGrandFinalReset
+          : bracketType === "double_elimination",
     },
     bracket,
   };
@@ -540,6 +732,7 @@ export function applyMatchResult(input: {
   matchId: MatchId;
   score1: number;
   score2: number;
+  bracketType?: TournamentBracketType;
 }) {
   const currentMatch = input.bracket.matches.find((match) => match.id === input.matchId);
   if (!currentMatch) {
@@ -565,15 +758,23 @@ export function applyMatchResult(input: {
       : match
   );
 
-  const bracket = deriveBracket(input.teams, seededMatches);
+  const bracket = deriveBracket(
+    input.teams,
+    seededMatches,
+    input.bracketType ?? input.bracket.bracketType
+  );
+
   return {
     bracket,
     status: deriveTournamentStatus(bracket),
   };
 }
 
-export function resetBracket(teams: TournamentTeam[]) {
-  const bracket = deriveBracket(teams);
+export function resetBracket(
+  teams: TournamentTeam[],
+  bracketType = getBracketTypeForTeamCount(teams.length)
+) {
+  const bracket = deriveBracket(teams, [], bracketType);
   return {
     bracket,
     status: deriveTournamentStatus(bracket),

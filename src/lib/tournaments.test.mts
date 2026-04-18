@@ -4,6 +4,8 @@ import {
   applyMatchResult,
   createInitialTournamentState,
   getDefaultTournamentSeedNames,
+  getBracketTypeForTeamCount,
+  resizePlayerNames,
 } from "./tournaments.ts";
 
 test("balanced team seeding pairs top seeds against bottom seeds", () => {
@@ -86,4 +88,25 @@ test("double-elimination bracket advances and requires a grand final reset when 
 
   assert.equal(completed.status, "completed");
   assert.equal(completed.bracket.championTeamId, "team-1");
+});
+
+test("larger team counts switch to single elimination and auto-advance byes", () => {
+  const playerNames = resizePlayerNames(getDefaultTournamentSeedNames(), 6).map((name, index) =>
+    name || `Player ${index + 1}`
+  );
+  const state = createInitialTournamentState(playerNames);
+
+  assert.equal(state.teams.length, 6);
+  assert.equal(getBracketTypeForTeamCount(state.teams.length), "single_elimination");
+  assert.equal(state.bracket.bracketType, "single_elimination");
+
+  const firstRound = state.bracket.groups[0];
+  assert.equal(firstRound?.title, "Quarterfinals");
+
+  const firstRoundMatches = firstRound
+    ? firstRound.matchIds.map((matchId) => state.bracket.matches.find((match) => match.id === matchId))
+    : [];
+
+  assert.equal(firstRoundMatches.length, 4);
+  assert.equal(firstRoundMatches.filter((match) => match?.status === "completed").length, 2);
 });

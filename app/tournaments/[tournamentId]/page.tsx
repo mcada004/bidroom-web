@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { db } from "@/src/lib/firebase";
 import {
-  TOURNAMENT_MATCH_GROUPS,
   applyMatchResult,
   coerceTournamentDocument,
   getPlayerById,
@@ -113,6 +113,7 @@ export default function TournamentPage() {
     return new Map(tournament?.bracket.matches.map((match) => [match.id, match]) ?? []);
   }, [tournament]);
   const champion = tournament ? getTeamById(tournament.teams, tournament.bracket.championTeamId) : null;
+  const canEditTournament = Boolean(isOwner && tournament?.status === "pending");
 
   function updateScoreInput(matchId: MatchId, field: "score1" | "score2", value: string) {
     setScoreInputs((current) => ({
@@ -241,9 +242,16 @@ export default function TournamentPage() {
         <div className="tournament-meta">
           <span className={getStatusPillClass(tournament.status)}>{tournament.status}</span>
           <span className="pill">{tournament.numberOfPlayers} players</span>
-          <span className="pill">4 teams</span>
+          <span className="pill">{tournament.teams.length} teams</span>
           {isOwner ? <span className="pill">Creator can edit</span> : <span className="pill">View-only link</span>}
         </div>
+        {canEditTournament ? (
+          <div className="row" style={{ justifyContent: "center", marginTop: 16 }}>
+            <Link className="button secondary" href={`/tournaments/${tournamentId}/edit`}>
+              Edit tournament
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       {champion ? (
@@ -316,7 +324,7 @@ export default function TournamentPage() {
         </div>
 
         <div className="tournament-columns">
-          {TOURNAMENT_MATCH_GROUPS.map((group) => (
+          {tournament.bracket.groups.map((group) => (
             <div key={group.title} className="match-group">
               <div className="section-title">{group.title}</div>
               <div className="match-list">
@@ -349,11 +357,21 @@ export default function TournamentPage() {
         <article className="card">
           <div className="section-title">Quick rules / settings</div>
           <div className="stack">
-            <div className="notice">WB semifinals and the first losers match are BO3.</div>
-            <div className="notice">Winners Final, Losers Final, Grand Final, and any reset are BO5.</div>
-            <div className="notice">
-              If the losers-bracket finalist wins the Grand Final, a Grand Final Reset is required.
-            </div>
+            {tournament.settings.bracketType === "double_elimination" ? (
+              <>
+                <div className="notice">WB semifinals and the first losers match are BO3.</div>
+                <div className="notice">Winners Final, Losers Final, Grand Final, and any reset are BO5.</div>
+                <div className="notice">
+                  If the losers-bracket finalist wins the Grand Final, a Grand Final Reset is required.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="notice">This bracket is single elimination because it has more or fewer than 4 teams.</div>
+                <div className="notice">Early rounds are BO3. The championship match is BO5.</div>
+                <div className="notice">Higher seeds get byes automatically when the team count is not a power of two.</div>
+              </>
+            )}
             <div className="notice">Anyone with this link can view. Only the creator can save scores.</div>
           </div>
         </article>

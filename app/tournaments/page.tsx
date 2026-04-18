@@ -19,6 +19,7 @@ type TournamentListEntry = {
   game: string;
   format: string;
   status: TournamentStatus;
+  teamCount: number;
   championName: string | null;
   updatedAtMs: number;
 };
@@ -68,6 +69,7 @@ export default function TournamentsPage() {
               game: tournament.game,
               format: tournament.format,
               status: tournament.status,
+              teamCount: tournament.teams.length,
               championName: champion?.name ?? null,
               updatedAtMs,
             } satisfies TournamentListEntry;
@@ -154,12 +156,18 @@ export default function TournamentsPage() {
                     <div className="muted">
                       {entry.game} • {entry.format}
                     </div>
-                  <div className="row">
+                    <div className="row">
                       <span className={`status-pill ${entry.status}`}>{entry.status}</span>
+                      <span className="pill">{entry.teamCount} teams</span>
                       {entry.championName ? <span className="pill">Winner: {entry.championName}</span> : null}
                     </div>
                   </div>
                   <div className="row" style={{ justifyContent: "flex-end" }}>
+                    {entry.status === "pending" ? (
+                      <Link className="button ghost" href={`/tournaments/${entry.id}/edit`}>
+                        Edit
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       className="button ghost"
