@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { doc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot, runTransaction } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { db } from "@/src/lib/firebase";
 import {
@@ -176,7 +176,7 @@ export default function TournamentPage() {
         transaction.update(tournamentRef, {
           bracket: nextState.bracket,
           status: nextState.status,
-          updatedAt: serverTimestamp(),
+          updatedAt: new Date(),
         });
       });
 
@@ -226,7 +226,7 @@ export default function TournamentPage() {
         transaction.update(tournamentRef, {
           bracket: nextState.bracket,
           status: nextState.status,
-          updatedAt: serverTimestamp(),
+          updatedAt: new Date(),
         });
       });
 

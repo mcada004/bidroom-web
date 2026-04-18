@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { db } from "@/src/lib/firebase";
 import {
@@ -17,6 +17,23 @@ import {
 } from "@/src/lib/tournaments";
 
 const DEFAULT_STATE = createInitialTournamentState(getDefaultTournamentSeedNames());
+
+type FirestoreLikeError = {
+  code?: string;
+  message?: string;
+};
+
+function extractFirestoreErrorMessage(error: unknown) {
+  const asObject = (error ?? {}) as FirestoreLikeError;
+
+  if (asObject.code === "permission-denied") {
+    return "Tournament writes are blocked by Firestore permissions. Deploy the updated tournament rules, then try again.";
+  }
+
+  return typeof asObject.message === "string"
+    ? asObject.message
+    : "Could not create tournament.";
+}
 
 export default function NewTournamentPage() {
   const router = useRouter();
@@ -59,6 +76,7 @@ export default function NewTournamentPage() {
     setError(null);
 
     try {
+      const now = new Date();
       const normalizedTitle = title.trim() || DEFAULT_TOURNAMENT_TITLE;
       const normalizedGame = game.trim() || DEFAULT_GAME_TITLE;
       const normalizedFormat = format.trim() || DEFAULT_FORMAT;
@@ -89,18 +107,13 @@ export default function NewTournamentPage() {
         },
         bracket: state.bracket,
         status: state.status,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: now,
+        updatedAt: now,
       });
 
       router.push(`/tournaments/${tournamentRef.id}`);
     } catch (creationError: unknown) {
-      const asObject = (creationError ?? {}) as { message?: unknown };
-      setError(
-        typeof asObject.message === "string"
-          ? asObject.message
-          : "Could not create tournament."
-      );
+      setError(extractFirestoreErrorMessage(creationError));
       setBusy(false);
     }
   }
@@ -144,6 +157,8 @@ export default function NewTournamentPage() {
               >
                 <option value="Halo 3">Halo 3</option>
                 <option value="Call of Duty">Call of Duty</option>
+                <option value="Call of Duty: Modern Warfare 1">Call of Duty: Modern Warfare 1</option>
+                <option value="Call of Duty: World at War">Call of Duty: World at War</option>
                 <option value="Halo 2">Halo 2</option>
                 <option value="Halo Infinite">Halo Infinite</option>
               </select>

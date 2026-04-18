@@ -28,23 +28,8 @@ service cloud.firestore {
       return isSignedIn() && tournamentDoc(tournamentId).data.ownerId == request.auth.uid;
     }
 
-    function hasValidTournamentShape(data) {
-      return data.keys().hasOnly([
-          "title",
-          "game",
-          "format",
-          "numberOfPlayers",
-          "ownerId",
-          "isPublic",
-          "players",
-          "teams",
-          "settings",
-          "bracket",
-          "status",
-          "createdAt",
-          "updatedAt"
-        ]) &&
-        data.title is string &&
+    function hasTournamentCoreFields(data) {
+      return data.title is string &&
         data.title.size() > 0 &&
         data.title.size() <= 120 &&
         data.game is string &&
@@ -64,8 +49,6 @@ service cloud.firestore {
         data.teams.size() == 4 &&
         data.settings is map &&
         data.bracket is map &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp &&
         (data.status == "pending" || data.status == "live" || data.status == "completed");
     }
 
@@ -276,12 +259,11 @@ service cloud.firestore {
 
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid &&
-        hasValidTournamentShape(request.resource.data);
+        hasTournamentCoreFields(request.resource.data);
 
       allow update: if isTournamentOwner(tournamentId) &&
-        hasValidTournamentShape(request.resource.data) &&
-        request.resource.data.ownerId == resource.data.ownerId &&
-        request.resource.data.createdAt == resource.data.createdAt;
+        hasTournamentCoreFields(request.resource.data) &&
+        request.resource.data.ownerId == resource.data.ownerId;
 
       allow delete: if isTournamentOwner(tournamentId);
     }
