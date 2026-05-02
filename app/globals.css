@@ -318,6 +318,154 @@ main {
   gap: 14px;
 }
 
+.rides-page {
+  display: grid;
+  gap: 26px;
+}
+
+.rides-summary-card {
+  display: grid;
+  gap: 18px;
+}
+
+.rides-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.rides-stat {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.rides-stat strong {
+  font-size: 28px;
+  font-family: "Iowan Old Style", "Palatino", "Palatino Linotype", serif;
+  font-weight: 500;
+}
+
+.rides-stat span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rides-region-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rides-region-pill {
+  background: white;
+}
+
+.rides-region-section {
+  display: grid;
+  gap: 20px;
+}
+
+.rides-region-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.rides-region-header h2,
+.ride-card h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino", "Palatino Linotype", serif;
+  font-weight: 500;
+}
+
+.rides-region-header h2 {
+  font-size: clamp(26px, 3vw, 36px);
+}
+
+.rides-region-header p {
+  max-width: 720px;
+  margin: 8px 0 0;
+}
+
+.rides-metro-group {
+  display: grid;
+  gap: 14px;
+}
+
+.rides-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.ride-card {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.ride-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ride-organizer {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.ride-summary,
+.ride-notes {
+  margin: 0;
+}
+
+.ride-summary {
+  font-size: 15px;
+}
+
+.ride-notes,
+.ride-source-line,
+.ride-verified {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rides-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 14px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.rides-detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+.rides-empty-state {
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(244, 238, 231, 0.92)),
+    white;
+}
+
 .match-card.pending {
   background: #fffdfb;
 }
@@ -403,6 +551,12 @@ main {
 
   .tournament-columns {
     grid-template-columns: 1fr;
+  }
+
+  .ride-card-top,
+  .rides-region-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .score-grid {

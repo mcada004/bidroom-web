@@ -22,22 +22,27 @@ export default function Header() {
           Bidroom
         </Link>
 
-        {!loading && user ? (
-          <nav className="nav-menu" aria-label="Primary">
-            <Link className="pill" href="/my-trips">
-              My Trips
-            </Link>
-            <Link className="pill" href="/create-trip">
-              Create Trip
-            </Link>
-            <Link className="pill" href="/tournaments">
-              Tournaments
-            </Link>
-            <Link className="pill" href="/account">
-              My Account
-            </Link>
-          </nav>
-        ) : null}
+        <nav className="nav-menu" aria-label="Primary">
+          <Link className="pill" href="/rides">
+            Rides
+          </Link>
+          {!loading && user ? (
+            <>
+              <Link className="pill" href="/my-trips">
+                My Trips
+              </Link>
+              <Link className="pill" href="/create-trip">
+                Create Trip
+              </Link>
+              <Link className="pill" href="/tournaments">
+                Tournaments
+              </Link>
+              <Link className="pill" href="/account">
+                My Account
+              </Link>
+            </>
+          ) : null}
+        </nav>
       </div>
 
       <div className="nav-actions">
