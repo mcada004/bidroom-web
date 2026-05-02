@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
           generatedAt: result.snapshot.generatedAt,
           rideCount: result.snapshot.rides.length,
           regionCount: result.snapshot.regions.length,
+          sourceCount: result.snapshot.syncSummary?.sourceCount ?? 0,
+          successfulSourceCount: result.snapshot.syncSummary?.successfulSourceCount ?? 0,
+          failedSourceCount: result.snapshot.syncSummary?.failedSourceCount ?? 0,
         }
       );
     }
@@ -35,6 +38,9 @@ export async function GET(request: NextRequest) {
       generatedAt: result.snapshot.generatedAt,
       rideCount: result.snapshot.rides.length,
       regionCount: result.snapshot.regions.length,
+      sourceCount: result.snapshot.syncSummary?.sourceCount ?? 0,
+      successfulSourceCount: result.snapshot.syncSummary?.successfulSourceCount ?? 0,
+      failedSourceCount: result.snapshot.syncSummary?.failedSourceCount ?? 0,
     });
   } catch (error) {
     return NextResponse.json(

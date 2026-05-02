@@ -339,6 +339,30 @@ main {
   gap: 14px;
 }
 
+.rides-sync-details {
+  display: grid;
+  gap: 12px;
+}
+
+.rides-sync-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.rides-sync-report-list {
+  display: grid;
+  gap: 12px;
+}
+
+.rides-sync-report {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
 .rides-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

@@ -32,6 +32,14 @@ function formatGeneratedAt(dateValue: string) {
   }).format(new Date(dateValue));
 }
 
+function formatVerifiedOn(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${value}T12:00:00Z`));
+}
+
 function formatDateForInput(value: string) {
   return value;
 }
@@ -91,6 +99,11 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
       }))
       .filter((entry) => entry.rides.length > 0);
   }, [filteredRides, snapshot.regions]);
+
+  const failedReports = useMemo(
+    () => (snapshot.sourceReports ?? []).filter((report) => !report.ok),
+    [snapshot.sourceReports]
+  );
 
   function clearFilters() {
     setSelectedRegion("all");
@@ -181,6 +194,63 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
         </div>
       </section>
 
+      {snapshot.syncSummary ? (
+        <section className="card soft rides-summary-card">
+          <div className="section-title">Daily Refresh</div>
+          <div className="rides-stats">
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.sourceCount}</strong>
+              <span>registered sources scanned</span>
+            </div>
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.successfulSourceCount}</strong>
+              <span>successful fetches</span>
+            </div>
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.failedSourceCount}</strong>
+              <span>failed fetches</span>
+            </div>
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.persisted ? "Live" : "Preview"}</strong>
+              <span>{snapshot.syncSummary.persisted ? "saved to Firestore" : "not persisted yet"}</span>
+            </div>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>
+            Last source refresh: {formatGeneratedAt(snapshot.syncSummary.generatedAt)}
+          </p>
+
+          {snapshot.sourceReports?.length ? (
+            <details className="rides-sync-details">
+              <summary>Source diagnostics</summary>
+              <div className="rides-sync-report-list">
+                {(failedReports.length > 0 ? failedReports : snapshot.sourceReports.slice(0, 10)).map((report) => (
+                  <article key={report.sourceId} className="rides-sync-report">
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      <strong>{report.label}</strong>
+                      <span className="pill">{report.ok ? "OK" : "Needs review"}</span>
+                    </div>
+                    <div className="muted">
+                      {report.pageTitle ?? "No page title"} {report.httpStatus ? `• HTTP ${report.httpStatus}` : ""}
+                    </div>
+                    {report.extractedSchedule ? <div>Schedule: {report.extractedSchedule}</div> : null}
+                    {report.extractedDistance ? <div>Distance: {report.extractedDistance}</div> : null}
+                    {report.extractedDropPolicy ? <div>Drop policy: {report.extractedDropPolicy}</div> : null}
+                    {report.error ? <div className="muted">Error: {report.error}</div> : null}
+                    <Link className="link" href={report.url} target="_blank" rel="noreferrer">
+                      Open source
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </section>
+      ) : (
+        <section className="notice">
+          Daily source refresh diagnostics will appear here after the first successful sync run.
+        </section>
+      )}
+
       {ridesByRegion.length === 0 ? (
         <section className="card rides-empty-state">
           <div className="stack" style={{ gap: 10 }}>
@@ -270,7 +340,7 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
                         </span>
                       ))}
                     </div>
-                    <span className="muted ride-verified">Verified {ride.verifiedOn}</span>
+                    <span className="muted ride-verified">Verified {formatVerifiedOn(ride.verifiedOn)}</span>
                   </div>
 
                   <div className="muted ride-source-line">

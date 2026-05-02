@@ -79,6 +79,35 @@ export type RideDirectorySnapshot = {
   generatedAt: string;
   regions: RideRegion[];
   rides: DerivedRideListing[];
+  syncSummary?: RideSyncSummary;
+  sourceReports?: RideSourceReport[];
+};
+
+export type RideSourceReport = {
+  sourceId: string;
+  rideId: string | null;
+  label: string;
+  url: string;
+  parserType: string;
+  fetchedAt: string;
+  ok: boolean;
+  httpStatus: number | null;
+  pageTitle: string | null;
+  pageDescription: string | null;
+  excerpt: string | null;
+  extractedSchedule: string | null;
+  extractedDistance: string | null;
+  extractedDropPolicy: string | null;
+  contentHash: string | null;
+  error: string | null;
+};
+
+export type RideSyncSummary = {
+  generatedAt: string;
+  sourceCount: number;
+  successfulSourceCount: number;
+  failedSourceCount: number;
+  persisted: boolean;
 };
 
 function asDate(value: string) {
@@ -1249,7 +1278,14 @@ export function getSeedRideRegions() {
   }));
 }
 
-export function buildRideDirectorySnapshot(today = new Date()): RideDirectorySnapshot {
+export function buildRideDirectorySnapshot(
+  today = new Date(),
+  options: {
+    generatedAt?: string;
+    syncSummary?: RideSyncSummary;
+    sourceReports?: RideSourceReport[];
+  } = {}
+): RideDirectorySnapshot {
   const todayKey = toDateKey(today);
   const regions = getSeedRideRegions();
   const rides = regions.flatMap((region) =>
@@ -1264,8 +1300,10 @@ export function buildRideDirectorySnapshot(today = new Date()): RideDirectorySna
   );
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: options.generatedAt ?? new Date().toISOString(),
     regions,
     rides,
+    syncSummary: options.syncSummary,
+    sourceReports: options.sourceReports,
   };
 }
