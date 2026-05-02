@@ -60,6 +60,9 @@ export type RideListing = {
   tags: string[];
   verifiedOn: string;
   recurrence: RideRecurrence;
+  latitude: number | null;
+  longitude: number | null;
+  locationPrecision: "exact" | "approximate" | "metro" | "unknown";
 };
 
 export type RideRegion = {
@@ -73,6 +76,12 @@ export type RideRegion = {
 export type DerivedRideListing = RideListing & {
   nextOccurrenceDate: string | null;
   nextOccurrenceLabel: string;
+};
+
+type RideCoordinate = {
+  latitude: number;
+  longitude: number;
+  locationPrecision: "exact" | "approximate" | "metro";
 };
 
 export type RideDirectorySnapshot = {
@@ -109,6 +118,9 @@ export type RideSyncSummary = {
   failedSourceCount: number;
   persisted: boolean;
 };
+
+type SeedRideListing = Omit<RideListing, "latitude" | "longitude" | "locationPrecision">;
+type SeedRideRegion = Omit<RideRegion, "rides"> & { rides: SeedRideListing[] };
 
 function asDate(value: string) {
   return new Date(`${value}T12:00:00Z`);
@@ -201,7 +213,7 @@ function formatOccurrenceLabel(dateKey: string | null) {
   }).format(asDate(dateKey));
 }
 
-const seedRideRegions: RideRegion[] = [
+const seedRideRegions: SeedRideRegion[] = [
   {
     slug: "bay-area",
     label: "Bay Area",
@@ -1271,10 +1283,56 @@ const seedRideRegions: RideRegion[] = [
   },
 ];
 
+const rideCoordinatesById: Record<string, RideCoordinate> = {
+  "bike-east-bay-group-ride-series": { latitude: 37.8044, longitude: -122.2711, locationPrecision: "metro" },
+  "grizzly-peak-tuesday-night-ride": { latitude: 37.8894, longitude: -122.2516, locationPrecision: "approximate" },
+  "marin-red-whale-sunday": { latitude: 37.9735, longitude: -122.5311, locationPrecision: "approximate" },
+  "marin-wednesday-gravel": { latitude: 37.9731, longitude: -122.5319, locationPrecision: "approximate" },
+  "western-wheelers-monday-coffee": { latitude: 37.3994, longitude: -122.1084, locationPrecision: "approximate" },
+  "western-wheelers-seal-point": { latitude: 37.5845, longitude: -122.3182, locationPrecision: "approximate" },
+  "western-wheelers-tuesday-evening": { latitude: 37.429, longitude: -122.2539, locationPrecision: "approximate" },
+  "fat-cake-ftwnb": { latitude: 37.7715, longitude: -122.4687, locationPrecision: "approximate" },
+  "fat-cake-headlands": { latitude: 37.8078, longitude: -122.475, locationPrecision: "approximate" },
+  "ornot-after-cake": { latitude: 37.7832, longitude: -122.4603, locationPrecision: "exact" },
+  "pas-normal-sf-weekly": { latitude: 37.7692, longitude: -122.4314, locationPrecision: "exact" },
+  "actc-ride-calendar": { latitude: 37.3382, longitude: -121.8863, locationPrecision: "metro" },
+  "mikes-bikes-community-events": { latitude: 37.332, longitude: -121.8904, locationPrecision: "metro" },
+  "sdbc-saturday-club-ride": { latitude: 32.8328, longitude: -117.2713, locationPrecision: "approximate" },
+  "sd-recyclers-sunday": { latitude: 32.7157, longitude: -117.1611, locationPrecision: "metro" },
+  "cyclo-vets-saturday-a": { latitude: 32.7665, longitude: -117.205, locationPrecision: "approximate" },
+  "cyclo-vets-wednesday-coffee": { latitude: 32.7665, longitude: -117.205, locationPrecision: "approximate" },
+  "descenders-weekly-schedule": { latitude: 32.7157, longitude: -117.1611, locationPrecision: "metro" },
+  "domestique-golden-hour": { latitude: 34.0195, longitude: -118.4912, locationPrecision: "approximate" },
+  "domestique-coffee-ride": { latitude: 34.0195, longitude: -118.4912, locationPrecision: "approximate" },
+  "domestique-all-club": { latitude: 34.0195, longitude: -118.4912, locationPrecision: "metro" },
+  "domestique-brentwood-hills": { latitude: 34.0195, longitude: -118.4912, locationPrecision: "approximate" },
+  "la-wheelmen-sunday-rides": { latitude: 34.0522, longitude: -118.2437, locationPrecision: "metro" },
+  "la-wheelmen-south-beach-ride": { latitude: 33.9765, longitude: -118.442, locationPrecision: "approximate" },
+  "incycle-pasadena-foo-chow": { latitude: 34.1439, longitude: -118.1498, locationPrecision: "exact" },
+  "incycle-pasadena-sunday-morning": { latitude: 34.1439, longitude: -118.1498, locationPrecision: "exact" },
+  "sc-velo-saturday": { latitude: 34.4156, longitude: -118.5513, locationPrecision: "approximate" },
+  "sc-velo-sunday-no-drop": { latitude: 34.4156, longitude: -118.5513, locationPrecision: "approximate" },
+  "cbs-cycling-saturday": { latitude: 34.4138, longitude: -118.551, locationPrecision: "metro" },
+  "incycle-santa-clarita-canyon": { latitude: 34.4175, longitude: -118.561, locationPrecision: "exact" },
+  "rbc-weekly-club-rides": { latitude: 33.9806, longitude: -117.3755, locationPrecision: "metro" },
+  "rbc-saturday-road-ride": { latitude: 33.9468, longitude: -117.3281, locationPrecision: "approximate" },
+  "incycle-rancho-monday": { latitude: 34.1064, longitude: -117.5931, locationPrecision: "exact" },
+  "incycle-chino-cow-ride": { latitude: 34.016, longitude: -117.6898, locationPrecision: "approximate" },
+};
+
 export function getSeedRideRegions() {
   return seedRideRegions.map((region) => ({
     ...region,
-    rides: region.rides.map((ride) => ({ ...ride, tags: [...ride.tags] })),
+    rides: region.rides.map((ride) => {
+      const coordinate = rideCoordinatesById[ride.id];
+      return {
+        ...ride,
+        tags: [...ride.tags],
+        latitude: coordinate?.latitude ?? null,
+        longitude: coordinate?.longitude ?? null,
+        locationPrecision: coordinate?.locationPrecision ?? "unknown",
+      };
+    }),
   }));
 }
 

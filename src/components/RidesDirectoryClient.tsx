@@ -2,25 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  rideOccursOnDateKey,
-  type DerivedRideListing,
-  type RideDirectorySnapshot,
-  type RideRegionSlug,
-} from "@/src/lib/groupRides";
+import RidesFilterControls from "@/src/components/RidesFilterControls";
+import type { RideDirectorySnapshot, RideRegionSlug } from "@/src/lib/groupRides";
+import { filterRides } from "@/src/lib/ridesFiltering";
 
 type Props = {
   snapshot: RideDirectorySnapshot;
 };
-
-type RegionOption = {
-  slug: "all" | RideRegionSlug;
-  label: string;
-};
-
-function weekdayName(dateValue: string) {
-  return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(`${dateValue}T12:00:00Z`));
-}
 
 function formatGeneratedAt(dateValue: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -40,54 +28,20 @@ function formatVerifiedOn(value: string) {
   }).format(new Date(`${value}T12:00:00Z`));
 }
 
-function formatDateForInput(value: string) {
-  return value;
-}
-
-function matchesDateFilter(ride: DerivedRideListing, dateValue: string) {
-  if (!dateValue) return true;
-  return rideOccursOnDateKey(ride, dateValue);
-}
-
-function matchesMileageFilter(ride: DerivedRideListing, minMileage: string, maxMileage: string) {
-  const min = Number(minMileage);
-  const max = Number(maxMileage);
-  const hasMin = Number.isFinite(min) && minMileage.trim() !== "";
-  const hasMax = Number.isFinite(max) && maxMileage.trim() !== "";
-
-  if (!hasMin && !hasMax) return true;
-  if (ride.distanceMinMiles === null && ride.distanceMaxMiles === null) return false;
-
-  const rideMin = ride.distanceMinMiles ?? ride.distanceMaxMiles ?? 0;
-  const rideMax = ride.distanceMaxMiles ?? ride.distanceMinMiles ?? 0;
-
-  if (hasMin && rideMax < min) return false;
-  if (hasMax && rideMin > max) return false;
-  return true;
-}
-
 export default function RidesDirectoryClient({ snapshot }: Props) {
   const [selectedRegion, setSelectedRegion] = useState<"all" | RideRegionSlug>("all");
   const [selectedDate, setSelectedDate] = useState("");
   const [minMileage, setMinMileage] = useState("");
   const [maxMileage, setMaxMileage] = useState("");
 
-  const regionOptions = useMemo<RegionOption[]>(
-    () => [
-      { slug: "all", label: "All regions" },
-      ...snapshot.regions.map((region) => ({ slug: region.slug, label: region.label })),
-    ],
-    [snapshot.regions]
-  );
-
   const filteredRides = useMemo(() => {
-    return snapshot.rides.filter((ride) => {
-      if (selectedRegion !== "all" && ride.regionSlug !== selectedRegion) return false;
-      if (!matchesDateFilter(ride, selectedDate)) return false;
-      if (!matchesMileageFilter(ride, minMileage, maxMileage)) return false;
-      return true;
+    return filterRides(snapshot, {
+      region: selectedRegion,
+      date: selectedDate,
+      minMileage,
+      maxMileage,
     });
-  }, [maxMileage, minMileage, selectedDate, selectedRegion, snapshot.rides]);
+  }, [maxMileage, minMileage, selectedDate, selectedRegion, snapshot]);
 
   const ridesByRegion = useMemo(() => {
     return snapshot.regions
@@ -127,72 +81,22 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
         </div>
       </section>
 
-      <section className="card rides-filter-card">
-        <div className="section-title">Filters</div>
-        <div className="rides-filter-grid">
-          <label className="label">
-            Region
-            <select
-              className="input"
-              value={selectedRegion}
-              onChange={(event) => setSelectedRegion(event.target.value as "all" | RideRegionSlug)}
-            >
-              {regionOptions.map((option) => (
-                <option key={option.slug} value={option.slug}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="label">
-            Next ride date
-            <input
-              className="input"
-              type="date"
-              value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
-            />
-          </label>
-
-          <label className="label">
-            Min miles
-            <input
-              className="input"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Any"
-              value={minMileage}
-              onChange={(event) => setMinMileage(event.target.value)}
-            />
-          </label>
-
-          <label className="label">
-            Max miles
-            <input
-              className="input"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Any"
-              value={maxMileage}
-              onChange={(event) => setMaxMileage(event.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <div className="row">
-            <span className="pill">{filteredRides.length} matching rides</span>
-            {selectedDate ? <span className="pill">{weekdayName(selectedDate)}</span> : null}
-            {selectedDate ? <span className="pill">Date {formatDateForInput(selectedDate)}</span> : null}
-          </div>
-          <button type="button" className="button ghost" onClick={clearFilters}>
-            Clear filters
-          </button>
-        </div>
-      </section>
+      <RidesFilterControls
+        snapshot={snapshot}
+        filters={{
+          region: selectedRegion,
+          date: selectedDate,
+          minMileage,
+          maxMileage,
+        }}
+        matchingCount={filteredRides.length}
+        currentView="list"
+        onRegionChange={setSelectedRegion}
+        onDateChange={setSelectedDate}
+        onMinMileageChange={setMinMileage}
+        onMaxMileageChange={setMaxMileage}
+        onClear={clearFilters}
+      />
 
       {snapshot.syncSummary ? (
         <section className="card soft rides-summary-card">

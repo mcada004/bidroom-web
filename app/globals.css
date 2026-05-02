@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 :root {
   --ink: #171615;
@@ -339,6 +340,15 @@ main {
   gap: 14px;
 }
 
+.rides-view-pill {
+  background: white;
+}
+
+.rides-view-pill.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .rides-sync-details {
   display: grid;
   gap: 12px;
@@ -500,6 +510,53 @@ main {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(244, 238, 231, 0.92)),
     white;
+}
+
+.rides-map-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.rides-map-canvas {
+  min-height: 620px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.rides-map-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.rides-map-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.rides-map-popup {
+  display: grid;
+  gap: 8px;
+  max-width: 260px;
+}
+
+.rides-map-popup-title {
+  font-family: "Iowan Old Style", "Palatino", "Palatino Linotype", serif;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.rides-map-popup-org {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rides-map-popup-meta {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
 }
 
 .match-card.pending {
