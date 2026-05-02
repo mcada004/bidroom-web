@@ -12,6 +12,7 @@ import {
   isFirestoreServiceAccountConfigured,
 } from "@/src/server/firestoreServiceAccount";
 import { fetchRideSourceReports } from "@/src/server/rideSourceParser";
+import type { RideSourceRegistryEntry } from "@/src/lib/rideSources";
 
 const RIDES_DOC_PATH = "siteData/rideDirectory";
 
@@ -32,13 +33,22 @@ function extractStringField(fields: Record<string, unknown> | undefined, fieldNa
   return typeof value === "string" ? value : null;
 }
 
-function buildSyncSummary(generatedAt: string, reports: RideSourceReport[], persisted: boolean): RideSyncSummary {
-  const successfulSourceCount = reports.filter((report) => report.ok).length;
+function buildSyncSummary(
+  generatedAt: string,
+  reports: RideSourceReport[],
+  sources: RideSourceRegistryEntry[],
+  persisted: boolean
+): RideSyncSummary {
+  const successfulSourceCount = reports.filter((report) => report.status === "fetched" && report.ok).length;
+  const failedSourceCount = reports.filter((report) => report.status === "failed").length;
+  const skippedSourceCount = reports.filter((report) => report.status === "skipped").length;
   return {
     generatedAt,
-    sourceCount: reports.length,
+    sourceCount: sources.length,
+    crawledSourceCount: sources.filter((source) => source.syncMode === "crawl").length,
     successfulSourceCount,
-    failedSourceCount: reports.length - successfulSourceCount,
+    failedSourceCount,
+    skippedSourceCount,
     persisted,
   };
 }
@@ -74,7 +84,7 @@ function shouldReplaceWithExtractedDropPolicy(dropPolicy: string) {
 function applySourceReports(snapshot: RideDirectorySnapshot, reports: RideSourceReport[], generatedAt: string) {
   const reportByRideId = new Map<string, RideSourceReport>();
   for (const report of reports) {
-    if (!report.rideId || !report.ok) continue;
+    if (!report.rideId || !report.ok || report.status !== "fetched") continue;
     reportByRideId.set(report.rideId, report);
   }
 
@@ -127,7 +137,7 @@ async function buildLiveSnapshot() {
   const provisionalSnapshot = buildRideDirectorySnapshot(new Date(generatedAt), {
     generatedAt,
     sourceReports: reports,
-    syncSummary: buildSyncSummary(generatedAt, reports, false),
+    syncSummary: buildSyncSummary(generatedAt, reports, sources, false),
   });
 
   const enrichedSnapshot = applySourceReports(provisionalSnapshot, reports, generatedAt);
@@ -201,7 +211,7 @@ export async function syncRideDirectorySnapshot() {
 
   const persistedSnapshot: RideDirectorySnapshot = {
     ...live.snapshot,
-    syncSummary: buildSyncSummary(live.generatedAt, live.reports, true),
+    syncSummary: buildSyncSummary(live.generatedAt, live.reports, live.sources, true),
   };
 
   const response = await fetch(buildDocumentUrl(projectId), {
@@ -217,11 +227,17 @@ export async function syncRideDirectorySnapshot() {
         rideCount: { integerValue: String(persistedSnapshot.rides.length) },
         regionCount: { integerValue: String(persistedSnapshot.regions.length) },
         sourceCount: { integerValue: String(live.sources.length) },
+        crawledSourceCount: {
+          integerValue: String(persistedSnapshot.syncSummary?.crawledSourceCount ?? 0),
+        },
         successfulSourceCount: {
           integerValue: String(persistedSnapshot.syncSummary?.successfulSourceCount ?? 0),
         },
         failedSourceCount: {
           integerValue: String(persistedSnapshot.syncSummary?.failedSourceCount ?? 0),
+        },
+        skippedSourceCount: {
+          integerValue: String(persistedSnapshot.syncSummary?.skippedSourceCount ?? 0),
         },
       },
     }),

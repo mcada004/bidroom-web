@@ -171,6 +171,34 @@ async function fetchHtml(url: string) {
 
 export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Promise<RideSourceReport> {
   const fetchedAt = new Date().toISOString();
+
+  if (source.syncMode !== "crawl") {
+    return {
+      sourceId: source.id,
+      rideId: source.rideId,
+      label: source.label,
+      url: source.url,
+      parserType: source.parserType,
+      syncMode: source.syncMode,
+      fetchedAt,
+      status: "skipped",
+      ok: true,
+      httpStatus: null,
+      pageTitle: null,
+      pageDescription: null,
+      excerpt: source.notes ?? null,
+      extractedSchedule: null,
+      extractedDistance: null,
+      extractedDropPolicy: null,
+      contentHash: null,
+      error: null,
+      skippedReason:
+        source.syncMode === "manual"
+          ? "Manual source: use organizer page or authenticated integration."
+          : "API reference: not crawled as an HTML ride source.",
+    };
+  }
+
   const fetched = await fetchHtml(source.url);
 
   if (!fetched.ok) {
@@ -180,7 +208,9 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
       label: source.label,
       url: source.url,
       parserType: source.parserType,
+      syncMode: source.syncMode,
       fetchedAt,
+      status: "failed",
       ok: false,
       httpStatus: fetched.httpStatus,
       pageTitle: null,
@@ -191,6 +221,7 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
       extractedDropPolicy: null,
       contentHash: null,
       error: fetched.error,
+      skippedReason: null,
     };
   }
 
@@ -206,7 +237,9 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
     label: source.label,
     url: source.url,
     parserType: source.parserType,
+    syncMode: source.syncMode,
     fetchedAt,
+    status: "fetched",
     ok: true,
     httpStatus: fetched.httpStatus,
     pageTitle,
@@ -217,6 +250,7 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
     extractedDropPolicy: extractDropPolicy(text),
     contentHash: createHash("sha256").update(html).digest("hex"),
     error: null,
+    skippedReason: null,
   };
 }
 

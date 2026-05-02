@@ -104,7 +104,11 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
           <div className="rides-stats">
             <div className="rides-stat">
               <strong>{snapshot.syncSummary.sourceCount}</strong>
-              <span>registered sources scanned</span>
+              <span>registered sources</span>
+            </div>
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.crawledSourceCount}</strong>
+              <span>sources crawled daily</span>
             </div>
             <div className="rides-stat">
               <strong>{snapshot.syncSummary.successfulSourceCount}</strong>
@@ -113,6 +117,10 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
             <div className="rides-stat">
               <strong>{snapshot.syncSummary.failedSourceCount}</strong>
               <span>failed fetches</span>
+            </div>
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.skippedSourceCount}</strong>
+              <span>manual or API-only sources</span>
             </div>
             <div className="rides-stat">
               <strong>{snapshot.syncSummary.persisted ? "Live" : "Preview"}</strong>
@@ -131,11 +139,14 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
                   <article key={report.sourceId} className="rides-sync-report">
                     <div className="row" style={{ justifyContent: "space-between" }}>
                       <strong>{report.label}</strong>
-                      <span className="pill">{report.ok ? "OK" : "Needs review"}</span>
+                      <span className="pill">
+                        {report.status === "skipped" ? "Skipped" : report.ok ? "OK" : "Needs review"}
+                      </span>
                     </div>
                     <div className="muted">
                       {report.pageTitle ?? "No page title"} {report.httpStatus ? `• HTTP ${report.httpStatus}` : ""}
                     </div>
+                    {report.skippedReason ? <div className="muted">{report.skippedReason}</div> : null}
                     {report.extractedSchedule ? <div>Schedule: {report.extractedSchedule}</div> : null}
                     {report.extractedDistance ? <div>Distance: {report.extractedDistance}</div> : null}
                     {report.extractedDropPolicy ? <div>Drop policy: {report.extractedDropPolicy}</div> : null}

@@ -26,8 +26,10 @@ export async function GET(request: NextRequest) {
           rideCount: result.snapshot.rides.length,
           regionCount: result.snapshot.regions.length,
           sourceCount: result.snapshot.syncSummary?.sourceCount ?? 0,
+          crawledSourceCount: result.snapshot.syncSummary?.crawledSourceCount ?? 0,
           successfulSourceCount: result.snapshot.syncSummary?.successfulSourceCount ?? 0,
           failedSourceCount: result.snapshot.syncSummary?.failedSourceCount ?? 0,
+          skippedSourceCount: result.snapshot.syncSummary?.skippedSourceCount ?? 0,
         }
       );
     }
@@ -39,8 +41,10 @@ export async function GET(request: NextRequest) {
       rideCount: result.snapshot.rides.length,
       regionCount: result.snapshot.regions.length,
       sourceCount: result.snapshot.syncSummary?.sourceCount ?? 0,
+      crawledSourceCount: result.snapshot.syncSummary?.crawledSourceCount ?? 0,
       successfulSourceCount: result.snapshot.syncSummary?.successfulSourceCount ?? 0,
       failedSourceCount: result.snapshot.syncSummary?.failedSourceCount ?? 0,
+      skippedSourceCount: result.snapshot.syncSummary?.skippedSourceCount ?? 0,
     });
   } catch (error) {
     return NextResponse.json(
