@@ -49,6 +49,9 @@ export default function RidesFilterControls({
           <Link className={`pill rides-view-pill ${currentView === "map" ? "is-active" : ""}`} href="/rides/map">
             Map
           </Link>
+          <Link className="pill rides-view-pill" href="/rides/status">
+            Status
+          </Link>
         </div>
       </div>
 

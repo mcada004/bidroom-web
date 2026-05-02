@@ -78,6 +78,9 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
           <span className="pill">{snapshot.rides.length} live listings</span>
           <span className="pill">Last snapshot {formatGeneratedAt(snapshot.generatedAt)}</span>
           <span className="pill">Daily sync ready</span>
+          <Link className="pill" href="/rides/status">
+            Sync status
+          </Link>
         </div>
       </section>
 
@@ -111,16 +114,20 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
               <span>sources crawled daily</span>
             </div>
             <div className="rides-stat">
+              <strong>{snapshot.syncSummary.integrationSourceCount}</strong>
+              <span>API-backed sources</span>
+            </div>
+            <div className="rides-stat">
               <strong>{snapshot.syncSummary.successfulSourceCount}</strong>
               <span>successful fetches</span>
             </div>
             <div className="rides-stat">
-              <strong>{snapshot.syncSummary.failedSourceCount}</strong>
-              <span>failed fetches</span>
-            </div>
-            <div className="rides-stat">
               <strong>{snapshot.syncSummary.skippedSourceCount}</strong>
               <span>manual or API-only sources</span>
+            </div>
+            <div className="rides-stat">
+              <strong>{snapshot.syncSummary.failedSourceCount}</strong>
+              <span>failed fetches</span>
             </div>
             <div className="rides-stat">
               <strong>{snapshot.syncSummary.persisted ? "Live" : "Preview"}</strong>
@@ -144,8 +151,17 @@ export default function RidesDirectoryClient({ snapshot }: Props) {
                       </span>
                     </div>
                     <div className="muted">
-                      {report.pageTitle ?? "No page title"} {report.httpStatus ? `• HTTP ${report.httpStatus}` : ""}
+                      {report.pageTitle ?? "No page title"} {report.httpStatus ? `• HTTP ${report.httpStatus}` : ""}{" "}
+                      {report.transport === "integration" && report.integrationProvider
+                        ? `• ${report.integrationProvider} integration`
+                        : ""}
+                      {report.parserStrategy ? `• ${report.parserStrategy}` : ""}
                     </div>
+                    {report.detectedEventCount > 0 ? (
+                      <div className="muted">
+                        Detected {report.detectedEventCount} date{report.detectedEventCount === 1 ? "" : "s"}
+                      </div>
+                    ) : null}
                     {report.skippedReason ? <div className="muted">{report.skippedReason}</div> : null}
                     {report.extractedSchedule ? <div>Schedule: {report.extractedSchedule}</div> : null}
                     {report.extractedDistance ? <div>Distance: {report.extractedDistance}</div> : null}

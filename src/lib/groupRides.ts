@@ -76,6 +76,7 @@ export type RideRegion = {
 export type DerivedRideListing = RideListing & {
   nextOccurrenceDate: string | null;
   nextOccurrenceLabel: string;
+  upcomingSourceDates: string[];
 };
 
 type RideCoordinate = {
@@ -97,8 +98,12 @@ export type RideSourceReport = {
   rideId: string | null;
   label: string;
   url: string;
+  finalUrl: string | null;
   parserType: string;
+  parserStrategy: string | null;
   syncMode: string;
+  transport: "crawl" | "integration";
+  integrationProvider: "meetup" | "strava" | "ridewithgps" | null;
   fetchedAt: string;
   status: "fetched" | "failed" | "skipped";
   ok: boolean;
@@ -109,6 +114,8 @@ export type RideSourceReport = {
   extractedSchedule: string | null;
   extractedDistance: string | null;
   extractedDropPolicy: string | null;
+  detectedEventCount: number;
+  detectedDates: string[];
   contentHash: string | null;
   error: string | null;
   skippedReason: string | null;
@@ -118,6 +125,7 @@ export type RideSyncSummary = {
   generatedAt: string;
   sourceCount: number;
   crawledSourceCount: number;
+  integrationSourceCount: number;
   successfulSourceCount: number;
   failedSourceCount: number;
   skippedSourceCount: number;
@@ -194,6 +202,9 @@ function occursOnDate(ride: RideListing, date: Date) {
 }
 
 export function rideOccursOnDateKey(ride: RideListing, dateKey: string) {
+  if ("upcomingSourceDates" in ride && Array.isArray(ride.upcomingSourceDates) && ride.upcomingSourceDates.includes(dateKey)) {
+    return true;
+  }
   return occursOnDate(ride, asDate(dateKey));
 }
 
@@ -1928,6 +1939,7 @@ export function buildRideDirectorySnapshot(
         ...ride,
         nextOccurrenceDate,
         nextOccurrenceLabel: formatOccurrenceLabel(nextOccurrenceDate),
+        upcomingSourceDates: [],
       } satisfies DerivedRideListing;
     })
   );

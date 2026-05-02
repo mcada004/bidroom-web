@@ -13,6 +13,12 @@ import {
 } from "@/src/server/firestoreServiceAccount";
 import { fetchRideSourceReports } from "@/src/server/rideSourceParser";
 import type { RideSourceRegistryEntry } from "@/src/lib/rideSources";
+import {
+  buildRideSyncStatusSnapshot,
+  getRideSyncStatus,
+  persistRideSyncStatus,
+  type RideSyncTrigger,
+} from "@/src/server/ridesSyncStatus";
 
 const RIDES_DOC_PATH = "siteData/rideDirectory";
 
@@ -46,6 +52,7 @@ function buildSyncSummary(
     generatedAt,
     sourceCount: sources.length,
     crawledSourceCount: sources.filter((source) => source.syncMode === "crawl").length,
+    integrationSourceCount: sources.filter((source) => Boolean(source.integration)).length,
     successfulSourceCount,
     failedSourceCount,
     skippedSourceCount,
@@ -81,6 +88,10 @@ function shouldReplaceWithExtractedDropPolicy(dropPolicy: string) {
   return normalized.includes("check") || normalized.includes("varies");
 }
 
+function getUpcomingSourceDates(report: RideSourceReport, generatedAt: string) {
+  return report.detectedDates.filter((dateKey) => dateKey >= generatedAt.slice(0, 10)).slice(0, 12);
+}
+
 function applySourceReports(snapshot: RideDirectorySnapshot, reports: RideSourceReport[], generatedAt: string) {
   const reportByRideId = new Map<string, RideSourceReport>();
   for (const report of reports) {
@@ -96,6 +107,7 @@ function applySourceReports(snapshot: RideDirectorySnapshot, reports: RideSource
 
     const nextRide = { ...ride } satisfies DerivedRideListing;
     nextRide.verifiedOn = verifiedOn;
+    nextRide.upcomingSourceDates = getUpcomingSourceDates(report, generatedAt);
 
     if ((!ride.distance || ride.distance.toLowerCase() === "varies") && report.extractedDistance) {
       nextRide.distance = report.extractedDistance;
@@ -114,6 +126,15 @@ function applySourceReports(snapshot: RideDirectorySnapshot, reports: RideSource
 
     if (report.pageTitle && report.pageTitle.length <= 120) {
       nextRide.sourceLabel = report.pageTitle;
+    }
+
+    if (nextRide.upcomingSourceDates.length > 0) {
+      nextRide.nextOccurrenceDate = nextRide.upcomingSourceDates[0] ?? ride.nextOccurrenceDate;
+      nextRide.nextOccurrenceLabel = new Intl.DateTimeFormat("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }).format(new Date(`${nextRide.nextOccurrenceDate}T12:00:00Z`));
     }
 
     if (report.excerpt && ride.notes.length < 140) {
@@ -188,8 +209,10 @@ export async function getRideDirectorySnapshot() {
   }
 }
 
-export async function syncRideDirectorySnapshot() {
+export async function syncRideDirectorySnapshot(trigger: RideSyncTrigger = "unknown") {
   const live = await buildLiveSnapshot();
+  const existingStatus = await getRideSyncStatus();
+  const lastAttemptedAt = live.generatedAt;
 
   if (!isFirestoreServiceAccountConfigured()) {
     return {
@@ -214,39 +237,74 @@ export async function syncRideDirectorySnapshot() {
     syncSummary: buildSyncSummary(live.generatedAt, live.reports, live.sources, true),
   };
 
-  const response = await fetch(buildDocumentUrl(projectId), {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      fields: {
-        payloadJson: { stringValue: JSON.stringify(persistedSnapshot) },
-        generatedAt: { timestampValue: live.generatedAt },
-        rideCount: { integerValue: String(persistedSnapshot.rides.length) },
-        regionCount: { integerValue: String(persistedSnapshot.regions.length) },
-        sourceCount: { integerValue: String(live.sources.length) },
-        crawledSourceCount: {
-          integerValue: String(persistedSnapshot.syncSummary?.crawledSourceCount ?? 0),
-        },
-        successfulSourceCount: {
-          integerValue: String(persistedSnapshot.syncSummary?.successfulSourceCount ?? 0),
-        },
-        failedSourceCount: {
-          integerValue: String(persistedSnapshot.syncSummary?.failedSourceCount ?? 0),
-        },
-        skippedSourceCount: {
-          integerValue: String(persistedSnapshot.syncSummary?.skippedSourceCount ?? 0),
-        },
+  try {
+    const response = await fetch(buildDocumentUrl(projectId), {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
       },
-    }),
-    cache: "no-store",
-  });
+      body: JSON.stringify({
+        fields: {
+          payloadJson: { stringValue: JSON.stringify(persistedSnapshot) },
+          generatedAt: { timestampValue: live.generatedAt },
+          rideCount: { integerValue: String(persistedSnapshot.rides.length) },
+          regionCount: { integerValue: String(persistedSnapshot.regions.length) },
+          sourceCount: { integerValue: String(live.sources.length) },
+          crawledSourceCount: {
+            integerValue: String(persistedSnapshot.syncSummary?.crawledSourceCount ?? 0),
+          },
+          integrationSourceCount: {
+            integerValue: String(persistedSnapshot.syncSummary?.integrationSourceCount ?? 0),
+          },
+          successfulSourceCount: {
+            integerValue: String(persistedSnapshot.syncSummary?.successfulSourceCount ?? 0),
+          },
+          failedSourceCount: {
+            integerValue: String(persistedSnapshot.syncSummary?.failedSourceCount ?? 0),
+          },
+          skippedSourceCount: {
+            integerValue: String(persistedSnapshot.syncSummary?.skippedSourceCount ?? 0),
+          },
+        },
+      }),
+      cache: "no-store",
+    });
 
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!response.ok) {
-    throw new Error(parseErrorMessage(payload));
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(parseErrorMessage(payload));
+    }
+
+    await persistRideSyncStatus(
+      buildRideSyncStatusSnapshot({
+        generatedAt: live.generatedAt,
+        lastAttemptedAt,
+        lastSuccessfulAt: live.generatedAt,
+        lastResult: persistedSnapshot.syncSummary && persistedSnapshot.syncSummary.failedSourceCount > 0 ? "partial" : "success",
+        trigger,
+        lastError: null,
+        syncSummary: persistedSnapshot.syncSummary ?? null,
+        sourceReports: live.reports,
+        sources: live.sources,
+      })
+    );
+  } catch (error) {
+    await persistRideSyncStatus(
+      buildRideSyncStatusSnapshot({
+        generatedAt: new Date().toISOString(),
+        lastAttemptedAt,
+        lastSuccessfulAt: existingStatus?.lastSuccessfulAt ?? null,
+        lastResult: "failure",
+        trigger,
+        lastError: error instanceof Error ? error.message : "Ride sync failed.",
+        syncSummary: live.snapshot.syncSummary ?? null,
+        sourceReports: live.reports,
+        sources: live.sources,
+      })
+    ).catch(() => undefined);
+
+    throw error;
   }
 
   return {

@@ -1,6 +1,29 @@
 import { getSeedRideRegions, type RideRegionSlug } from "@/src/lib/groupRides";
 
 export type RideSourceParserType = "recurring-page" | "calendar-page" | "shop-event-page" | "community-page";
+export type RideSourceSyncMode = "crawl" | "manual" | "api_reference";
+
+export type RideSourceIntegration =
+  | {
+      provider: "meetup";
+      accessTokenEnv: string;
+      networkUrlnameEnv: string;
+      maxEvents?: number;
+    }
+  | {
+      provider: "strava";
+      accessTokenEnv: string;
+      clubIdEnv: string;
+      maxActivities?: number;
+    }
+  | {
+      provider: "ridewithgps";
+      apiKeyEnv: string;
+      accessTokenEnv?: string;
+      authTokenEnv?: string;
+      eventsUrlEnv: string;
+      maxEvents?: number;
+    };
 
 export type RideSourceRegistryEntry = {
   id: string;
@@ -11,7 +34,8 @@ export type RideSourceRegistryEntry = {
   url: string;
   parserType: RideSourceParserType;
   trustLevel: "official" | "community";
-  syncMode: "crawl" | "manual" | "api_reference";
+  syncMode: RideSourceSyncMode;
+  integration?: RideSourceIntegration;
   notes?: string;
 };
 
@@ -134,6 +158,12 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     parserType: "community-page",
     trustLevel: "community",
     syncMode: "manual",
+    integration: {
+      provider: "meetup",
+      accessTokenEnv: "MEETUP_ACCESS_TOKEN",
+      networkUrlnameEnv: "MEETUP_BAY_AREA_CYCLING_NETWORK_URLNAME",
+      maxEvents: 8,
+    },
     notes: "Meetup group; use official API or manual verification.",
   },
   {
@@ -146,6 +176,12 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     parserType: "community-page",
     trustLevel: "community",
     syncMode: "manual",
+    integration: {
+      provider: "meetup",
+      accessTokenEnv: "MEETUP_ACCESS_TOKEN",
+      networkUrlnameEnv: "MEETUP_BAY_AREA_ROAD_BIKING_NETWORK_URLNAME",
+      maxEvents: 8,
+    },
     notes: "Peninsula/South Bay road cycling Meetup.",
   },
   {
@@ -194,6 +230,12 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     parserType: "community-page",
     trustLevel: "community",
     syncMode: "manual",
+    integration: {
+      provider: "strava",
+      accessTokenEnv: "STRAVA_ACCESS_TOKEN",
+      clubIdEnv: "STRAVA_FAT_CAKE_CLUB_ID",
+      maxActivities: 8,
+    },
     notes: "Manual source because Strava club/event access is limited without OAuth.",
   },
   {
@@ -425,6 +467,26 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     notes: "Discovery source for RWGPS-hosted club calendars.",
   },
   {
+    id: "source-rwgps-club-events-live",
+    rideId: null,
+    regionSlug: "bay-area",
+    organizer: "Ride with GPS",
+    label: "Ride with GPS club events feed",
+    url: "https://ridewithgps.com/api/v1/doc/endpoints/events",
+    parserType: "community-page",
+    trustLevel: "official",
+    syncMode: "manual",
+    integration: {
+      provider: "ridewithgps",
+      apiKeyEnv: "RWGPS_API_KEY",
+      accessTokenEnv: "RWGPS_ACCESS_TOKEN",
+      authTokenEnv: "RWGPS_AUTH_TOKEN",
+      eventsUrlEnv: "RWGPS_EVENTS_URL",
+      maxEvents: 10,
+    },
+    notes: "Authenticated Ride with GPS events integration when a live events endpoint URL is configured.",
+  },
+  {
     id: "source-rwgps-calendar-embed-doc",
     rideId: null,
     regionSlug: "bay-area",
@@ -451,7 +513,7 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
 ];
 
 export function getRideSourceRegistry() {
-  const derivedEntries = getSeedRideRegions().flatMap((region) =>
+  const derivedEntries: RideSourceRegistryEntry[] = getSeedRideRegions().flatMap((region) =>
     region.rides.map((ride) => ({
       id: `source-${ride.id}`,
       rideId: ride.id,
@@ -462,6 +524,7 @@ export function getRideSourceRegistry() {
       parserType: inferParserType(ride.sourceType),
       trustLevel: inferTrustLevel(ride.sourceType),
       syncMode: "crawl" as const,
+      integration: undefined,
     }))
   );
 
