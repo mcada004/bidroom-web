@@ -8,7 +8,7 @@ type Props = {
   snapshot: RideDirectorySnapshot;
   filters: RideFilters;
   matchingCount: number;
-  currentView: "list" | "map";
+  currentView: "list" | "map" | "calendar";
   onRegionChange: (value: "all" | RideRegionSlug) => void;
   onDateChange: (value: string) => void;
   onMinMileageChange: (value: string) => void;
@@ -42,6 +42,9 @@ export default function RidesFilterControls({
         <div className="row">
           <Link className={`pill rides-view-pill ${currentView === "list" ? "is-active" : ""}`} href="/rides">
             List
+          </Link>
+          <Link className={`pill rides-view-pill ${currentView === "calendar" ? "is-active" : ""}`} href="/rides/calendar">
+            Calendar
           </Link>
           <Link className={`pill rides-view-pill ${currentView === "map" ? "is-active" : ""}`} href="/rides/map">
             Map

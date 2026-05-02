@@ -559,6 +559,92 @@ main {
   font-size: 13px;
 }
 
+.rides-calendar-card {
+  display: grid;
+  gap: 18px;
+}
+
+.rides-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rides-calendar-title {
+  font-family: "Iowan Old Style", "Palatino", "Palatino Linotype", serif;
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.rides-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rides-calendar-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.rides-calendar-weekday {
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rides-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rides-calendar-day {
+  min-height: 110px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: white;
+  padding: 12px;
+  display: grid;
+  align-content: space-between;
+  gap: 12px;
+  text-align: left;
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.rides-calendar-day:hover {
+  border-color: #ccb591;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(25, 18, 11, 0.06);
+}
+
+.rides-calendar-day.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 12px 26px rgba(25, 18, 11, 0.1);
+}
+
+.rides-calendar-day.is-today {
+  background: #fffaf3;
+}
+
+.rides-calendar-day.is-outside {
+  background: #faf7f2;
+  color: var(--muted);
+}
+
+.rides-calendar-day-number {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.rides-calendar-day-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .match-card.pending {
   background: #fffdfb;
 }
@@ -650,6 +736,16 @@ main {
   .rides-region-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .rides-calendar-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rides-calendar-weekdays,
+  .rides-calendar-grid {
+    min-width: 680px;
   }
 
   .score-grid {
