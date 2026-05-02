@@ -101,6 +101,18 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     notes: "Strong Bay Area ride aggregator calendar.",
   },
   {
+    id: "source-bay-area-rides-home",
+    rideId: null,
+    regionSlug: "bay-area",
+    organizer: "Bay Area Rides",
+    label: "BayAreaRides home",
+    url: "https://bayarearides.org",
+    parserType: "calendar-page",
+    trustLevel: "community",
+    syncMode: "crawl",
+    notes: "Primary Bay Area group ride discovery site and companion source to the SF Group Rides calendar.",
+  },
+  {
     id: "source-sf-bike-events",
     rideId: "sf-bike-coalition-events",
     regionSlug: "bay-area",
