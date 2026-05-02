@@ -328,6 +328,17 @@ main {
   gap: 18px;
 }
 
+.rides-filter-card {
+  display: grid;
+  gap: 18px;
+}
+
+.rides-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
 .rides-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -390,6 +401,7 @@ main {
 .rides-region-header p {
   max-width: 720px;
   margin: 8px 0 0;
+  color: var(--muted);
 }
 
 .rides-metro-group {
