@@ -255,7 +255,12 @@ export async function getRideDirectorySnapshot() {
   const fallbackSnapshot = buildRideDirectorySnapshot();
 
   if (!isFirestoreServiceAccountConfigured()) {
-    return fallbackSnapshot;
+    try {
+      const live = await buildLiveSnapshot();
+      return live.snapshot;
+    } catch {
+      return fallbackSnapshot;
+    }
   }
 
   try {
