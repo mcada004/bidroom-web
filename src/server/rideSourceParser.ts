@@ -273,16 +273,67 @@ function extractNextDataStrings(html: string) {
   return matches;
 }
 
+function extractJsonArrayForKey(payload: string, key: string) {
+  const needle = `"${key}":[`;
+  const keyIndex = payload.indexOf(needle);
+  if (keyIndex < 0) return null;
+
+  const arrayStart = keyIndex + needle.length - 1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = arrayStart; index < payload.length; index += 1) {
+    const char = payload[index];
+    if (!char) continue;
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "[") {
+      depth += 1;
+      continue;
+    }
+
+    if (char !== "]") continue;
+
+    depth -= 1;
+    if (depth === 0) {
+      return payload.slice(arrayStart, index + 1);
+    }
+  }
+
+  return null;
+}
+
 function parseBayAreaRidesEvents(source: RideSourceRegistryEntry, html: string) {
   const decodedStrings = extractNextDataStrings(html);
-  const ridesPayload = decodedStrings.find((entry) => entry.includes('"rides":[') && entry.includes(',"clubs":['));
-  if (!ridesPayload) return [];
+  const ridesArrayJson =
+    decodedStrings
+      .map((entry) => extractJsonArrayForKey(entry, "initialGroupRides") ?? extractJsonArrayForKey(entry, "rides"))
+      .find((entry): entry is string => Boolean(entry)) ?? null;
 
-  const ridesMatch = ridesPayload.match(/"rides":(\[[\s\S]*?\]),"clubs":\[/);
-  if (!ridesMatch?.[1]) return [];
+  if (!ridesArrayJson) return [];
 
   try {
-    const parsed = JSON.parse(ridesMatch[1]) as Array<Record<string, unknown>>;
+    const parsed = JSON.parse(ridesArrayJson) as Array<Record<string, unknown>>;
     return parsed
       .map((entry): RideSourceEvent | null => {
         const groupRideId = entry.group_ride_id;

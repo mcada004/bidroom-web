@@ -108,3 +108,20 @@ test("parseRideSourceContent extracts BayAreaRides event objects from Next paylo
   assert.equal(parsed.sourceEvents[0]?.metroArea, "South Bay");
   assert.equal(parsed.detectedEventCount, 1);
 });
+
+test("parseRideSourceContent extracts BayAreaRides events from initialGroupRides payload", () => {
+  const payload = `9:["$","$L13",null,{"initialGroupRides":[{"group_ride_id":17,"club_id":17,"club_title":"House of Pain (HOP Ride)","ride_title":"🔁 House of Pain (HOP Ride)","start_time":"2026-05-09 09:00:00","details_url":"https://www.facebook.com/groups/291586665032871/","distance":87944,"description":"<p>Saturday morning group ride.</p>","start_coords":"POINT (-121.99701 37.81898)","start_address":"Peet's Coffee - 435 Railroad Ave, Danville, California","regions":["East Bay"]}],"foo":"bar"}]`;
+  const html = `<html><body><script>self.__next_f.push([1,${JSON.stringify(payload)}])</script></body></html>`;
+
+  const parsed = parseRideSourceContent(
+    makeSource({ url: "https://bayarearides.org", parserType: "calendar-page" }),
+    html,
+    "Bay Area group rides feed."
+  );
+
+  assert.equal(parsed.sourceEvents.length, 1);
+  assert.equal(parsed.sourceEvents[0]?.title, "🔁 House of Pain (HOP Ride)");
+  assert.equal(parsed.sourceEvents[0]?.dateKey, "2026-05-09");
+  assert.equal(parsed.sourceEvents[0]?.metroArea, "East Bay");
+  assert.equal(parsed.detectedEventCount, 1);
+});
