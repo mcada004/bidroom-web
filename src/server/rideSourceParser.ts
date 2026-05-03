@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { RideSourceReport } from "../lib/groupRides.ts";
+import type { RideSourceEvent, RideSourceReport, RideRegionSlug } from "../lib/groupRides.ts";
 import type { RideSourceRegistryEntry } from "../lib/rideSources.ts";
 import { fetchIntegrationRideSourceReport } from "./rideSourceIntegrations.ts";
 
@@ -17,6 +17,7 @@ type ParsedSourceContent = {
   extractedDropPolicy: string | null;
   detectedDates: string[];
   detectedEventCount: number;
+  sourceEvents: RideSourceEvent[];
 };
 
 function decodeHtml(value: string) {
@@ -221,6 +222,113 @@ function summarizeDateKeys(dateKeys: string[]) {
   return `Upcoming dates: ${formatted.join(", ")}`;
 }
 
+function clipText(value: string | null, maxLength = 220) {
+  if (!value) return null;
+  const collapsed = value.replace(/\s+/g, " ").trim();
+  if (!collapsed) return null;
+  return collapsed.slice(0, maxLength);
+}
+
+function stripHtmlToText(value: string | null) {
+  if (!value) return null;
+  return clipText(stripTags(decodeHtml(value)));
+}
+
+function parsePoint(value: string | null) {
+  if (!value) return null;
+  const match = value.match(/POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i);
+  if (!match) return null;
+  return {
+    longitude: Number(match[1]),
+    latitude: Number(match[2]),
+  };
+}
+
+function formatMiles(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value <= 0) return "Varies";
+  const rounded = Math.round(value);
+  return `${rounded} miles`;
+}
+
+function inferBayAreaMetroArea(regions: unknown) {
+  if (Array.isArray(regions) && regions.length > 0 && typeof regions[0] === "string") {
+    return regions[0];
+  }
+  return "Bay Area";
+}
+
+function extractNextDataStrings(html: string) {
+  const matches: string[] = [];
+  const scriptRegex = /self\.__next_f\.push\(\[1,("([\s\S]*?)")\]\)<\/script>/g;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = scriptRegex.exec(html))) {
+    try {
+      matches.push(JSON.parse(match[1]));
+    } catch {
+      continue;
+    }
+  }
+
+  return matches;
+}
+
+function parseBayAreaRidesEvents(source: RideSourceRegistryEntry, html: string) {
+  const decodedStrings = extractNextDataStrings(html);
+  const ridesPayload = decodedStrings.find((entry) => entry.includes('"rides":[') && entry.includes(',"clubs":['));
+  if (!ridesPayload) return [];
+
+  const ridesMatch = ridesPayload.match(/"rides":(\[[\s\S]*?\]),"clubs":\[/);
+  if (!ridesMatch?.[1]) return [];
+
+  try {
+    const parsed = JSON.parse(ridesMatch[1]) as Array<Record<string, unknown>>;
+    return parsed
+      .map((entry): RideSourceEvent | null => {
+        const groupRideId = entry.group_ride_id;
+        const rawDate = typeof entry.start_time === "string" ? entry.start_time : null;
+        const date = rawDate ? new Date(rawDate.replace(" ", "T")) : null;
+        if (!date || Number.isNaN(date.getTime())) return null;
+
+        const coords = parsePoint(typeof entry.start_coords === "string" ? entry.start_coords : null);
+        const distanceRaw = typeof entry.distance === "number" ? entry.distance : null;
+        const distanceMiles = distanceRaw && distanceRaw > 0 ? distanceRaw / 1609.344 : null;
+        const description =
+          typeof entry.description === "string" && !entry.description.startsWith("$")
+            ? stripHtmlToText(entry.description)
+            : null;
+        const metroArea = inferBayAreaMetroArea(entry.regions);
+
+        return {
+          id: `${source.id}-${String(groupRideId ?? rawDate ?? Math.random())}`,
+          title: typeof entry.ride_title === "string" ? entry.ride_title : source.label,
+          organizer: typeof entry.club_title === "string" ? entry.club_title : source.organizer,
+          dateKey: date.toISOString().slice(0, 10),
+          sourceUrl: typeof entry.details_url === "string" ? entry.details_url : source.url,
+          sourceLabel: "BayAreaRides event",
+          distanceMiles,
+          distanceLabel: formatMiles(distanceMiles),
+          startLocation: typeof entry.start_address === "string" ? entry.start_address : null,
+          summary: description,
+          latitude: coords?.latitude ?? null,
+          longitude: coords?.longitude ?? null,
+          locationPrecision: coords ? "exact" : "unknown",
+          metroArea,
+          regionSlug: source.regionSlug as RideRegionSlug,
+          dropPolicy:
+            description && /\bno-drop\b/i.test(description)
+              ? "No-drop"
+              : description && /\bno one left behind\b/i.test(description)
+                ? "No-drop"
+                : null,
+        } satisfies RideSourceEvent;
+      })
+      .filter((event): event is RideSourceEvent => Boolean(event));
+  } catch {
+    return [];
+  }
+}
+
 export function parseRideSourceContent(source: RideSourceRegistryEntry, html: string, pageDescription: string | null) {
   const parserStrategy = detectParserStrategy(source);
   const text = stripTags(decodeHtml(html));
@@ -229,6 +337,9 @@ export function parseRideSourceContent(source: RideSourceRegistryEntry, html: st
   const isoDateKeys = extractIsoDateKeys(html);
   const naturalDateKeys = extractNaturalLanguageDateKeys(text);
   const detectedDates = uniqueSortedDateKeys([...jsonLdDateKeys, ...isoDateKeys, ...naturalDateKeys]).slice(0, 24);
+  const sourceEvents = source.url.includes("bayarearides.org") ? parseBayAreaRidesEvents(source, html) : [];
+  const sourceEventDates = sourceEvents.map((event) => event.dateKey);
+  const mergedDetectedDates = uniqueSortedDateKeys([...detectedDates, ...sourceEventDates]).slice(0, 48);
 
   const scheduleFromText = extractScheduleFromText(text);
   const scheduleFromLines = extractScheduleFromLines(lines);
@@ -237,7 +348,7 @@ export function parseRideSourceContent(source: RideSourceRegistryEntry, html: st
 
   const extractedSchedule =
     parserStrategy === "tockify-calendar" || parserStrategy === "wildapricot-calendar"
-      ? summarizeDateKeys(detectedDates) ?? scheduleFromText ?? scheduleFromLines
+      ? summarizeDateKeys(mergedDetectedDates) ?? scheduleFromText ?? scheduleFromLines
       : scheduleFromText ?? scheduleFromLines ?? null;
 
   const excerptSource =
@@ -249,10 +360,11 @@ export function parseRideSourceContent(source: RideSourceRegistryEntry, html: st
     parserStrategy,
     excerpt: buildExcerpt(excerptSource),
     extractedSchedule,
-    extractedDistance,
+    extractedDistance: sourceEvents[0]?.distanceLabel && sourceEvents[0].distanceLabel !== "Varies" ? sourceEvents[0].distanceLabel : extractedDistance,
     extractedDropPolicy,
-    detectedDates,
-    detectedEventCount: detectedDates.length,
+    detectedDates: mergedDetectedDates,
+    detectedEventCount: sourceEvents.length > 0 ? sourceEvents.length : mergedDetectedDates.length,
+    sourceEvents,
   } satisfies ParsedSourceContent;
 }
 
@@ -365,6 +477,7 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
       extractedDropPolicy: null,
       detectedEventCount: 0,
       detectedDates: [],
+      sourceEvents: [],
       contentHash: null,
       error: null,
       skippedReason:
@@ -401,6 +514,7 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
       extractedDropPolicy: null,
       detectedEventCount: 0,
       detectedDates: [],
+      sourceEvents: [],
       contentHash: null,
       error: fetched.error,
       skippedReason: null,
@@ -435,6 +549,7 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
     extractedDropPolicy: parsed.extractedDropPolicy,
     detectedEventCount: parsed.detectedEventCount,
     detectedDates: parsed.detectedDates,
+    sourceEvents: parsed.sourceEvents,
     contentHash: createHash("sha256").update(html).digest("hex"),
     error: null,
     skippedReason: null,

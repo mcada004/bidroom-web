@@ -129,6 +129,7 @@ function buildBaseReport(
     extractedDropPolicy: null,
     detectedEventCount: 0,
     detectedDates: [],
+    sourceEvents: [],
     contentHash: null,
     error: null,
     skippedReason: null,

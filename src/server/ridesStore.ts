@@ -2,6 +2,7 @@ import {
   buildRideDirectorySnapshot,
   type DerivedRideListing,
   type RideDirectorySnapshot,
+  type RideSourceEvent,
   type RideSourceReport,
   type RideSyncSummary,
 } from "@/src/lib/groupRides";
@@ -92,6 +93,83 @@ function getUpcomingSourceDates(report: RideSourceReport, generatedAt: string) {
   return report.detectedDates.filter((dateKey) => dateKey >= generatedAt.slice(0, 10)).slice(0, 12);
 }
 
+function formatOccurrenceLabel(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${dateKey}T12:00:00Z`));
+}
+
+function createSourceDerivedRide(event: RideSourceEvent, generatedAt: string): DerivedRideListing {
+  return {
+    id: event.id,
+    title: event.title,
+    organizer: event.organizer,
+    regionSlug: event.regionSlug,
+    metroArea: event.metroArea,
+    sourceType: "Source-derived event",
+    sourceLabel: event.sourceLabel,
+    sourceUrl: event.sourceUrl,
+    cadence: "One-off event",
+    schedule: formatOccurrenceLabel(event.dateKey),
+    distance: event.distanceLabel,
+    distanceMinMiles: event.distanceMiles ? Math.round(event.distanceMiles) : null,
+    distanceMaxMiles: event.distanceMiles ? Math.round(event.distanceMiles) : null,
+    pace: "Check source",
+    terrain: "Check source",
+    dropPolicy: event.dropPolicy ?? "Check source",
+    startLocation: event.startLocation ?? "Check source",
+    access: "Check source",
+    summary: event.summary ?? "Imported from a live ride source.",
+    notes: "This listing was imported from a source event feed during the latest daily refresh.",
+    tags: ["Source-derived", event.metroArea, "Live feed"],
+    verifiedOn: generatedAt.slice(0, 10),
+    recurrence: {
+      kind: "specific-dates",
+      dates: [event.dateKey],
+    },
+    latitude: event.latitude,
+    longitude: event.longitude,
+    locationPrecision: event.locationPrecision,
+    nextOccurrenceDate: event.dateKey,
+    nextOccurrenceLabel: formatOccurrenceLabel(event.dateKey),
+    upcomingSourceDates: [event.dateKey],
+  };
+}
+
+function appendSourceDerivedRides(snapshot: RideDirectorySnapshot, reports: RideSourceReport[], generatedAt: string) {
+  const existingIds = new Set(snapshot.rides.map((ride) => ride.id));
+  const sourceDerivedRides: DerivedRideListing[] = [];
+
+  for (const report of reports) {
+    if (report.status !== "fetched" || report.sourceEvents.length === 0) continue;
+    for (const event of report.sourceEvents) {
+      if (existingIds.has(event.id)) continue;
+      existingIds.add(event.id);
+      sourceDerivedRides.push(createSourceDerivedRide(event, generatedAt));
+    }
+  }
+
+  if (sourceDerivedRides.length === 0) {
+    return snapshot;
+  }
+
+  const regions = snapshot.regions.map((region) => ({
+    ...region,
+    rides: [
+      ...region.rides,
+      ...sourceDerivedRides.filter((ride) => ride.regionSlug === region.slug),
+    ],
+  }));
+
+  return {
+    ...snapshot,
+    regions,
+    rides: [...snapshot.rides, ...sourceDerivedRides],
+  };
+}
+
 function applySourceReports(snapshot: RideDirectorySnapshot, reports: RideSourceReport[], generatedAt: string) {
   const reportByRideId = new Map<string, RideSourceReport>();
   for (const report of reports) {
@@ -144,10 +222,12 @@ function applySourceReports(snapshot: RideDirectorySnapshot, reports: RideSource
     return nextRide;
   });
 
-  return {
+  const enrichedSnapshot = {
     ...snapshot,
     rides,
   };
+
+  return appendSourceDerivedRides(enrichedSnapshot, reports, generatedAt);
 }
 
 async function buildLiveSnapshot() {

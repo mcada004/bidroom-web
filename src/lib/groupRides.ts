@@ -116,9 +116,29 @@ export type RideSourceReport = {
   extractedDropPolicy: string | null;
   detectedEventCount: number;
   detectedDates: string[];
+  sourceEvents: RideSourceEvent[];
   contentHash: string | null;
   error: string | null;
   skippedReason: string | null;
+};
+
+export type RideSourceEvent = {
+  id: string;
+  title: string;
+  organizer: string;
+  dateKey: string;
+  sourceUrl: string;
+  sourceLabel: string;
+  distanceMiles: number | null;
+  distanceLabel: string;
+  startLocation: string | null;
+  summary: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationPrecision: "exact" | "approximate" | "metro" | "unknown";
+  metroArea: string;
+  regionSlug: RideRegionSlug;
+  dropPolicy: string | null;
 };
 
 export type RideSyncSummary = {

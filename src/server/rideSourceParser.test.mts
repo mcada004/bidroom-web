@@ -92,3 +92,19 @@ test("parseRideSourceContent keeps recurring schedule language for recurring pag
   assert.match(parsed.extractedDropPolicy ?? "", /regroups/i);
 });
 
+test("parseRideSourceContent extracts BayAreaRides event objects from Next payload", () => {
+  const payload = `3c:[{"rides":[{"group_ride_id":7912,"club_title":"Almaden Cycle Touring Club","ride_title":"Monday Mixed Terrain- Palo Alto Baylands","start_time":"2026-05-04 10:00:00.000000","details_url":"https://www.actc.org/ridestats/calendar/show_ride.php?ride_id=31318_20260504","distance":75396,"description":"<p>No one left behind.</p>","start_coords":"POINT (-121.92217 37.29287)","start_address":"1980 Hamilton Ave., San Jose, CA","regions":["South Bay"]}],"clubs":[]}]`;
+  const html = `<html><body><script>self.__next_f.push([1,${JSON.stringify(payload)}])</script></body></html>`;
+
+  const parsed = parseRideSourceContent(
+    makeSource({ url: "https://bayarearides.org", parserType: "calendar-page" }),
+    html,
+    "Bay Area group rides feed."
+  );
+
+  assert.equal(parsed.sourceEvents.length, 1);
+  assert.equal(parsed.sourceEvents[0]?.title, "Monday Mixed Terrain- Palo Alto Baylands");
+  assert.equal(parsed.sourceEvents[0]?.dateKey, "2026-05-04");
+  assert.equal(parsed.sourceEvents[0]?.metroArea, "South Bay");
+  assert.equal(parsed.detectedEventCount, 1);
+});
