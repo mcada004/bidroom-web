@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import type { RideSourceReport } from "@/src/lib/groupRides";
 import { getRideDirectorySnapshot } from "@/src/server/ridesStore";
 import { getRideSourceRegistry } from "@/src/lib/rideSources";
 import { buildRideIntegrationStatuses, getRideSyncStatus } from "@/src/server/ridesSyncStatus";
@@ -22,6 +23,42 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function groupFailedReports(reports: RideSourceReport[]) {
+  const grouped = new Map<
+    string,
+    {
+      report: RideSourceReport;
+      affectedCount: number;
+      affectedLabels: string[];
+    }
+  >();
+
+  for (const report of reports) {
+    const key = [
+      report.url,
+      report.transport,
+      report.integrationProvider ?? "",
+      report.parserStrategy ?? report.parserType,
+      report.httpStatus ?? "",
+      report.error ?? "",
+    ].join("::");
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.affectedCount += 1;
+      existing.affectedLabels.push(report.label);
+      continue;
+    }
+
+    grouped.set(key, {
+      report,
+      affectedCount: 1,
+      affectedLabels: [report.label],
+    });
+  }
+
+  return [...grouped.values()];
+}
+
 export default async function RidesStatusPage() {
   const [snapshot, syncStatus] = await Promise.all([getRideDirectorySnapshot(), getRideSyncStatus()]);
   const sources = getRideSourceRegistry();
@@ -29,6 +66,7 @@ export default async function RidesStatusPage() {
   const syncSummary = syncStatus?.syncSummary ?? snapshot.syncSummary ?? null;
   const integrationStatuses = syncStatus?.integrationStatuses ?? buildRideIntegrationStatuses(sources, sourceReports);
   const failedReports = sourceReports.filter((report) => report.status === "failed");
+  const failedReportGroups = groupFailedReports(failedReports);
   const sourceCount = syncSummary?.sourceCount ?? sources.length;
   const crawledSourceCount = syncSummary?.crawledSourceCount ?? sources.filter((source) => source.syncMode === "crawl").length;
   const integrationSourceCount =
@@ -80,7 +118,7 @@ export default async function RidesStatusPage() {
             <span>integration sources</span>
           </div>
           <div className="rides-stat">
-            <strong>{failedReports.length}</strong>
+            <strong>{failedReportGroups.length}</strong>
             <span>failed sources on latest run</span>
           </div>
         </div>
@@ -126,14 +164,14 @@ export default async function RidesStatusPage() {
 
       <section className="card">
         <div className="section-title">Source Failures</div>
-        {failedReports.length === 0 ? (
+        {failedReportGroups.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
             No source fetch failures were recorded on the latest run.
           </p>
         ) : (
           <div className="rides-sync-report-list" style={{ marginTop: 18 }}>
-            {failedReports.map((report) => (
-              <article key={report.sourceId} className="rides-sync-report">
+            {failedReportGroups.map(({ report, affectedCount, affectedLabels }) => (
+              <article key={`${report.url}-${report.httpStatus ?? "none"}-${report.error ?? "unknown"}`} className="rides-sync-report">
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <strong>{report.label}</strong>
                   <span className="pill">Failed</span>
@@ -144,8 +182,14 @@ export default async function RidesStatusPage() {
                     : report.parserStrategy ?? report.parserType}
                   {report.httpStatus ? ` • HTTP ${report.httpStatus}` : ""}
                 </div>
+                {affectedCount > 1 ? (
+                  <div className="muted">
+                    Affected listings: {affectedCount} ({affectedLabels.slice(0, 3).join(", ")}
+                    {affectedLabels.length > 3 ? ", …" : ""})
+                  </div>
+                ) : null}
                 <div className="muted">{report.error ?? "Unknown source failure."}</div>
-                <Link className="link" href={report.finalUrl ?? report.url} target="_blank" rel="noreferrer">
+                <Link className="link" href={report.url} target="_blank" rel="noreferrer">
                   Open source
                 </Link>
               </article>
@@ -182,4 +226,3 @@ export default async function RidesStatusPage() {
     </div>
   );
 }
-

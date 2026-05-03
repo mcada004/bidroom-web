@@ -1,4 +1,4 @@
-import { getSeedRideRegions, type RideRegionSlug } from "@/src/lib/groupRides";
+import { getSeedRideRegions, type RideRegionSlug } from "./groupRides.ts";
 
 export type RideSourceParserType = "recurring-page" | "calendar-page" | "shop-event-page" | "community-page";
 export type RideSourceSyncMode = "crawl" | "manual" | "api_reference";
@@ -32,11 +32,27 @@ export type RideSourceRegistryEntry = {
   organizer: string;
   label: string;
   url: string;
+  crawlUrl?: string;
   parserType: RideSourceParserType;
   trustLevel: "official" | "community";
   syncMode: RideSourceSyncMode;
   integration?: RideSourceIntegration;
   notes?: string;
+};
+
+const rideSourceOverrides: Partial<Record<string, Partial<RideSourceRegistryEntry>>> = {
+  "domestique-golden-hour": {
+    crawlUrl: "https://www.domestiquecyclingclub.com/",
+  },
+  "domestique-coffee-ride": {
+    crawlUrl: "https://www.domestiquecyclingclub.com/",
+  },
+  "domestique-all-club": {
+    crawlUrl: "https://www.domestiquecyclingclub.com/",
+  },
+  "domestique-brentwood-hills": {
+    crawlUrl: "https://www.domestiquecyclingclub.com/",
+  },
 };
 
 function inferParserType(sourceType: string): RideSourceParserType {
@@ -121,8 +137,8 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     url: "https://sfbike.org/events/",
     parserType: "calendar-page",
     trustLevel: "official",
-    syncMode: "crawl",
-    notes: "Official SF Bike events and rides.",
+    syncMode: "manual",
+    notes: "Official SF Bike events and rides. Server-side crawl is blocked by Cloudflare, so this remains a manual source until an official feed is available.",
   },
   {
     id: "source-bike-east-bay-group-rides-category",
@@ -237,18 +253,18 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     rideId: "fat-cake-club-strava",
     regionSlug: "bay-area",
     organizer: "Fat Cake Club",
-    label: "Fat Cake Club Strava",
-    url: "https://www.strava.com/clubs/fatcakeclub",
-    parserType: "community-page",
+    label: "Fat Cake Club rides",
+    url: "https://www.fatcake.cc/rides",
+    parserType: "recurring-page",
     trustLevel: "community",
-    syncMode: "manual",
+    syncMode: "crawl",
     integration: {
       provider: "strava",
       accessTokenEnv: "STRAVA_ACCESS_TOKEN",
       clubIdEnv: "STRAVA_FAT_CAKE_CLUB_ID",
       maxActivities: 8,
     },
-    notes: "Manual source because Strava club/event access is limited without OAuth.",
+    notes: "Public rides page for daily crawl, with optional Strava integration for richer club data when OAuth is configured.",
   },
   {
     id: "source-fat-cake-chronicle-profile",
@@ -403,8 +419,8 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
     url: "https://bikesiliconvalley.org/resources/local-bike-clubs",
     parserType: "community-page",
     trustLevel: "official",
-    syncMode: "crawl",
-    notes: "Directory source for future expansion and club discovery.",
+    syncMode: "manual",
+    notes: "Directory source for future expansion and club discovery. Kept manual because it is a seed list, not a live ride feed, and can be bot-sensitive.",
   },
   {
     id: "source-meetup-graphql-api",
@@ -524,7 +540,13 @@ const extraSourceRegistryEntries: RideSourceRegistryEntry[] = [
   },
 ];
 
+function getRegistryMergeKey(entry: Pick<RideSourceRegistryEntry, "rideId" | "url">) {
+  return `${entry.rideId ?? "__none__"}::${entry.url}`;
+}
+
 export function getRideSourceRegistry() {
+  const mergedEntries = new Map<string, RideSourceRegistryEntry>();
+
   const derivedEntries: RideSourceRegistryEntry[] = getSeedRideRegions().flatMap((region) =>
     region.rides.map((ride) => ({
       id: `source-${ride.id}`,
@@ -537,8 +559,19 @@ export function getRideSourceRegistry() {
       trustLevel: inferTrustLevel(ride.sourceType),
       syncMode: "crawl" as const,
       integration: undefined,
+      ...rideSourceOverrides[ride.id],
     }))
   );
 
-  return [...derivedEntries, ...extraSourceRegistryEntries];
+  for (const entry of derivedEntries) {
+    mergedEntries.set(getRegistryMergeKey(entry), entry);
+  }
+
+  for (const entry of extraSourceRegistryEntries) {
+    const key = getRegistryMergeKey(entry);
+    const existing = mergedEntries.get(key);
+    mergedEntries.set(key, existing ? { ...existing, ...entry } : entry);
+  }
+
+  return [...mergedEntries.values()];
 }

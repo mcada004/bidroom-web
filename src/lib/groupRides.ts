@@ -917,8 +917,8 @@ const seedRideRegions: SeedRideRegion[] = [
         regionSlug: "bay-area",
         metroArea: "San Francisco",
         sourceType: "Community club page",
-        sourceLabel: "Fat Cake Club Strava",
-        sourceUrl: "https://www.strava.com/clubs/fatcakeclub",
+        sourceLabel: "Fat Cake Club rides",
+        sourceUrl: "https://www.fatcake.cc/rides",
         cadence: "Community feed",
         schedule: "Ride organization often happens through Strava and related community channels",
         distance: "Varies",
@@ -932,7 +932,7 @@ const seedRideRegions: SeedRideRegion[] = [
         summary:
           "A strong signal for active SF group riding even when direct event extraction is limited.",
         notes:
-          "Included primarily as a community source with source-link value rather than a guaranteed structured event feed.",
+          "The public rides page is the stable source link; optional Strava integration can enrich it when club credentials are configured.",
         tags: ["Strava", "Community", "San Francisco", "Discovery"],
         verifiedOn: "2026-05-02",
         recurrence: {

@@ -202,7 +202,7 @@ function extractJsonLdEventDates(html: string) {
 }
 
 function detectParserStrategy(source: RideSourceRegistryEntry) {
-  const url = source.url.toLowerCase();
+  const url = (source.crawlUrl ?? source.url).toLowerCase();
   if (url.includes("tockify.com")) return "tockify-calendar";
   if (url.includes("wildapricot.org")) return "wildapricot-calendar";
   if (source.parserType === "recurring-page") return "recurring-page";
@@ -337,7 +337,7 @@ export function parseRideSourceContent(source: RideSourceRegistryEntry, html: st
   const isoDateKeys = extractIsoDateKeys(html);
   const naturalDateKeys = extractNaturalLanguageDateKeys(text);
   const detectedDates = uniqueSortedDateKeys([...jsonLdDateKeys, ...isoDateKeys, ...naturalDateKeys]).slice(0, 24);
-  const sourceEvents = source.url.includes("bayarearides.org") ? parseBayAreaRidesEvents(source, html) : [];
+  const sourceEvents = (source.crawlUrl ?? source.url).includes("bayarearides.org") ? parseBayAreaRidesEvents(source, html) : [];
   const sourceEventDates = sourceEvents.map((event) => event.dateKey);
   const mergedDetectedDates = uniqueSortedDateKeys([...detectedDates, ...sourceEventDates]).slice(0, 48);
 
@@ -488,7 +488,7 @@ export async function fetchRideSourceReport(source: RideSourceRegistryEntry): Pr
     };
   }
 
-  const fetched = await fetchHtml(source.url);
+  const fetched = await fetchHtml(source.crawlUrl ?? source.url);
 
   if (!fetched.ok) {
     return {
