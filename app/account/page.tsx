@@ -14,6 +14,7 @@ import {
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/context/AuthContext";
 import { normalizeDisplayName } from "@/src/lib/authGuests";
+import StravaConnectionCard from "@/src/components/StravaConnectionCard";
 
 type SaveState =
   | { kind: "idle"; message: null }
@@ -163,6 +164,8 @@ export default function AccountPage() {
           ) : null}
         </form>
       </section>
+
+      <StravaConnectionCard />
     </main>
   );
 }

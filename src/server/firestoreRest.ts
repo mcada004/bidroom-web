@@ -12,6 +12,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function buildUserDocumentPath(projectId: string, uid: string): string {
+  return `projects/${projectId}/databases/(default)/documents/users/${uid}`;
+}
+
 export function toFirestoreValue(value: unknown): FirestoreValue {
   if (value === null) return { nullValue: null };
   if (typeof value === "string") return { stringValue: value };
@@ -38,6 +42,30 @@ export function toFirestoreValue(value: unknown): FirestoreValue {
   }
 
   throw new Error("Unsupported value type for Firestore encoding.");
+}
+
+export function fromFirestoreValue(value: unknown): unknown {
+  const record = value as Record<string, unknown> | null;
+  if (!record || typeof record !== "object") return null;
+  if ("nullValue" in record) return null;
+  if ("stringValue" in record && typeof record.stringValue === "string") return record.stringValue;
+  if ("booleanValue" in record && typeof record.booleanValue === "boolean") return record.booleanValue;
+  if ("integerValue" in record && typeof record.integerValue === "string") return Number(record.integerValue);
+  if ("doubleValue" in record && typeof record.doubleValue === "number") return record.doubleValue;
+  if ("timestampValue" in record && typeof record.timestampValue === "string") return record.timestampValue;
+  if ("arrayValue" in record) {
+    const values = (record.arrayValue as { values?: unknown[] } | undefined)?.values ?? [];
+    return values.map((entry) => fromFirestoreValue(entry));
+  }
+  if ("mapValue" in record) {
+    const fields = (record.mapValue as { fields?: Record<string, unknown> } | undefined)?.fields ?? {};
+    const parsed: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(fields)) {
+      parsed[key] = fromFirestoreValue(nested);
+    }
+    return parsed;
+  }
+  return null;
 }
 
 function buildTripDocumentPath(projectId: string, tripId: string): string {
@@ -101,6 +129,68 @@ export async function getTripCreatedByUid(projectId: string, tripId: string): Pr
   const fields = payload.fields as Record<string, unknown> | undefined;
   const createdByUid = (fields?.createdByUid as Record<string, unknown> | undefined)?.stringValue;
   return typeof createdByUid === "string" ? createdByUid : null;
+}
+
+export async function getUserFields(input: {
+  projectId: string;
+  uid: string;
+  idToken: string;
+}): Promise<Record<string, unknown> | null> {
+  const documentPath = buildUserDocumentPath(input.projectId, input.uid);
+  const url = `https://firestore.googleapis.com/v1/${documentPath}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${input.idToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (response.status === 404) return null;
+
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) throw new Error(parseErrorMessage(payload));
+
+  const fields = payload.fields as Record<string, unknown> | undefined;
+  if (!fields) return {};
+
+  const parsed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    parsed[key] = fromFirestoreValue(value);
+  }
+  return parsed;
+}
+
+export async function patchUserFields(input: {
+  projectId: string;
+  uid: string;
+  idToken: string;
+  fields: Record<string, unknown>;
+}): Promise<void> {
+  const documentPath = buildUserDocumentPath(input.projectId, input.uid);
+  const url = new URL(`https://firestore.googleapis.com/v1/${documentPath}`);
+
+  const firestoreFields: Record<string, FirestoreValue> = {};
+  for (const [fieldPath, rawValue] of Object.entries(input.fields)) {
+    if (rawValue === undefined) continue;
+    url.searchParams.append("updateMask.fieldPaths", fieldPath);
+    firestoreFields[fieldPath] = toFirestoreValue(rawValue);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${input.idToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fields: firestoreFields }),
+    cache: "no-store",
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new Error(parseErrorMessage(payload));
+  }
 }
 
 export async function patchTripFields(input: {
