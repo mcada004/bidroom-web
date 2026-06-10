@@ -29,9 +29,9 @@ type MyTripIndexEntry = {
 
 type TripSnapshotEntry = {
   exists: boolean;
-  name: string;
-  status: TripStatus;
-  inviteCode: string;
+  name: string | null;
+  status: TripStatus | null;
+  inviteCode: string | null;
   listingImageUrl: string | null;
   listingLocationLabel: string | null;
   updatedAtMs: number;
@@ -111,50 +111,57 @@ export default function MyTripsPage() {
     return () => unsub();
   }, [loading, user, router]);
 
+  // Key the per-trip listeners on the set of trip IDs (not the indexTrips array
+  // identity) so index-only changes don't tear down and re-create every listener.
+  const tripIdsKey = indexTrips
+    .map((trip) => trip.tripId)
+    .sort()
+    .join(",");
+
   useEffect(() => {
-    if (!indexTrips.length) {
+    if (!tripIdsKey) {
       setTripSnapshots({});
       return;
     }
 
-    const unsubs = indexTrips.map((trip) =>
+    const unsubs = tripIdsKey.split(",").map((tripId) =>
       onSnapshot(
-        doc(db, "trips", trip.tripId),
+        doc(db, "trips", tripId),
         (snapshot) => {
           const data = snapshot.data();
           setTripSnapshots((prev) => ({
             ...prev,
-            [trip.tripId]: {
+            [tripId]: {
               exists: snapshot.exists(),
               name:
                 snapshot.exists() && typeof data?.name === "string" && data.name.trim()
                   ? data.name
-                  : trip.name,
-              status: snapshot.exists() ? normalizeStatus(data?.status) : trip.status,
+                  : null,
+              status: snapshot.exists() ? normalizeStatus(data?.status) : null,
               inviteCode:
-                snapshot.exists() && typeof data?.inviteCode === "string" ? data.inviteCode : trip.inviteCode,
+                snapshot.exists() && typeof data?.inviteCode === "string" ? data.inviteCode : null,
               listingImageUrl:
                 snapshot.exists() ? toOptionalString(data?.listingImageUrl) : null,
               listingLocationLabel:
-                snapshot.exists() ? toOptionalString(data?.listingLocationLabel) : trip.listingLocationLabel,
+                snapshot.exists() ? toOptionalString(data?.listingLocationLabel) : null,
               updatedAtMs:
                 snapshot.exists()
-                  ? Math.max(toMillis(data?.updatedAt), toMillis(data?.createdAt), trip.updatedAtMs)
-                  : trip.updatedAtMs,
+                  ? Math.max(toMillis(data?.updatedAt), toMillis(data?.createdAt))
+                  : 0,
             },
           }));
         },
         () => {
           setTripSnapshots((prev) => ({
             ...prev,
-            [trip.tripId]: {
+            [tripId]: {
               exists: false,
-              name: trip.name,
-              status: trip.status,
-              inviteCode: trip.inviteCode,
+              name: null,
+              status: null,
+              inviteCode: null,
               listingImageUrl: null,
-              listingLocationLabel: trip.listingLocationLabel,
-              updatedAtMs: trip.updatedAtMs,
+              listingLocationLabel: null,
+              updatedAtMs: 0,
             },
           }));
         }
@@ -164,7 +171,7 @@ export default function MyTripsPage() {
     return () => {
       for (const unsub of unsubs) unsub();
     };
-  }, [indexTrips]);
+  }, [tripIdsKey]);
 
   async function archiveTrip(tripId: string) {
     if (!user) return;
@@ -249,7 +256,7 @@ export default function MyTripsPage() {
         inviteCode: snapshot?.inviteCode ?? trip.inviteCode,
         listingImageUrl: snapshot?.listingImageUrl ?? null,
         listingLocationLabel: snapshot?.listingLocationLabel ?? trip.listingLocationLabel,
-        updatedAtMs: snapshot?.updatedAtMs ?? trip.updatedAtMs,
+        updatedAtMs: Math.max(snapshot?.updatedAtMs ?? 0, trip.updatedAtMs),
         archivedAtMs: trip.archivedAtMs,
       } satisfies MyTripEntry;
     })
@@ -272,6 +279,8 @@ export default function MyTripsPage() {
               <img
                 src={trip.listingImageUrl}
                 alt={trip.name}
+                loading="lazy"
+                decoding="async"
                 style={{
                   width: 120,
                   minWidth: 120,

@@ -456,6 +456,8 @@ export default function CreateTripPage() {
                 <img
                   src={listingImageUrl}
                   alt={listingTitle || "Listing preview"}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     width: "100%",
                     maxWidth: 420,

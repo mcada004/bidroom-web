@@ -650,6 +650,8 @@ export default function TripSettingsPage() {
                 <img
                   src={listingImageUrl}
                   alt={listingTitle || "Listing preview"}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     width: "100%",
                     maxWidth: 420,
