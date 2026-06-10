@@ -112,7 +112,9 @@ export default function ResultsPage() {
       if (unsubRooms) unsubRooms();
       if (unsubMembers) unsubMembers();
     };
-  }, [tripId, code, loading, user]);
+    // `user` is intentionally not a dependency: boot() doesn't use it, and
+    // including it re-created all three listeners on every auth state change.
+  }, [tripId, code, loading]);
 
   const memberName = useMemo(() => {
     const map: Record<string, string> = {};

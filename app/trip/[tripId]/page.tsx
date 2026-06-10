@@ -180,10 +180,14 @@ export default function TripPage() {
 
   const [nowMs, setNowMs] = useState(Date.now());
 
+  // Only tick the clock while the auction is live; otherwise the whole page
+  // re-renders every second for no reason (draft/ended have no countdown).
   useEffect(() => {
+    if (trip?.status !== "live") return;
+    setNowMs(Date.now());
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [trip?.status]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1192,6 +1196,8 @@ export default function TripPage() {
                 <img
                   src={trip.listingImageUrl}
                   alt={trip.listingTitle || "Listing preview"}
+                  loading="lazy"
+                  decoding="async"
                   style={{
                     width: "100%",
                     maxWidth: 520,
