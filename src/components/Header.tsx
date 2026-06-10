@@ -26,6 +26,9 @@ export default function Header() {
           <Link className="pill" href="/rides">
             Rides
           </Link>
+          <Link className="pill" href="/bike">
+            Adventures
+          </Link>
           {!loading && user ? (
             <>
               <Link className="pill" href="/my-trips">
