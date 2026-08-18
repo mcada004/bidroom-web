@@ -29,6 +29,9 @@ export default function Header() {
           <Link className="pill" href="/bike">
             Adventures
           </Link>
+          <Link className="pill" href="/sheep">
+            Counting Sheep
+          </Link>
           {!loading && user ? (
             <>
               <Link className="pill" href="/my-trips">
