@@ -32,6 +32,9 @@ export default function Header() {
           <Link className="pill" href="/sheep">
             Counting Sheep
           </Link>
+          <Link className="pill" href="/fantasy-draft">
+            Draft Board
+          </Link>
           {!loading && user ? (
             <>
               <Link className="pill" href="/my-trips">
