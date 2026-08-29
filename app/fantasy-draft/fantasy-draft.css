@@ -23,6 +23,28 @@
 .draft-kicker { text-transform: uppercase; letter-spacing: .18em; font-size: 12px; }
 .draft-hero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+.draft-access-card {
+  width: min(680px, 100%);
+  margin: 56px auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255,255,255,.92);
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+.draft-access-card h1 { margin: 4px 0 10px; font: 500 clamp(32px, 5vw, 48px)/1.05 "Iowan Old Style", Palatino, serif; }
+.draft-access-card > p:not(.draft-kicker) { margin: 0 0 20px; color: var(--muted); line-height: 1.6; }
+
+.draft-sync-status { display: inline-flex; align-items: center; gap: 7px; margin-top: 11px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.draft-sync-status i { width: 8px; height: 8px; border-radius: 50%; background: #d29a36; box-shadow: 0 0 0 4px rgba(210,154,54,.14); }
+.draft-sync-status.live i { background: #2a9b4d; box-shadow: 0 0 0 4px rgba(42,155,77,.14); }
+.draft-sync-status.offline i { background: #c2453d; box-shadow: 0 0 0 4px rgba(194,69,61,.14); }
+.draft-sync-error { margin: 0 0 18px; border: 1px solid #e3b2ae; border-radius: 12px; background: #fff0ef; color: #842f29; padding: 11px 14px; font-size: 13px; }
+.draft-actions button:disabled,
+.draft-away-undo:disabled,
+.fantasy-player-remove:disabled,
+.draft-hero-actions button:disabled { opacity: .48; cursor: wait; }
+
 .draft-stats {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
