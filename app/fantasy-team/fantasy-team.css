@@ -28,22 +28,38 @@
 
 .fantasy-team-hero span { color: var(--muted); }
 .fantasy-team-only .draft-page { min-height: 0; }
-.fantasy-team-only .draft-page > :not(.draft-team) { display: none; }
+.fantasy-team-only .draft-page > :not(.draft-team):not(.fantasy-note-backdrop) { display: none; }
 .fantasy-team-only .draft-team { margin: 0; padding: 28px; }
 .fantasy-team-only .draft-section-heading { margin-bottom: 20px; }
-.fantasy-team-only .draft-team-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.fantasy-team-only .draft-team-list button {
-  display: flex;
-  align-items: center;
-  text-align: left;
-  border-radius: 14px;
-  padding: 14px 16px;
-  font-size: 15px;
+.fantasy-team-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
 }
-.fantasy-team-only .draft-team-list button b { margin-left: auto; }
+.fantasy-team-tools label { display: grid; gap: 6px; }
+.fantasy-team-tools label > span { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.fantasy-team-tools select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  color: var(--ink);
+  padding: 11px 12px;
+  font: inherit;
+}
+.fantasy-team-only .draft-team-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fantasy-team-only .fantasy-roster-player {
+  border-radius: 14px;
+}
+.fantasy-team-only .fantasy-player-info { padding: 13px 14px; }
+.fantasy-team-only .fantasy-player-info strong { font-size: 15px; }
+.fantasy-team-only .fantasy-player-info small { font-size: 10px; }
+.fantasy-team-only .fantasy-player-remove { min-width: 46px; }
 
 @media (max-width: 640px) {
   .fantasy-team-hero { align-items: flex-start; flex-direction: column; }
+  .fantasy-team-tools { grid-template-columns: 1fr; }
   .fantasy-team-only .draft-team-list { grid-template-columns: 1fr; }
   .fantasy-team-only .draft-team { padding: 20px; }
 }
