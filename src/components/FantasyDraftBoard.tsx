@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type Player = readonly [rank: number, name: string, position: string, team: string, flag: string];
 type DraftStatus = "X" | "D";
@@ -62,7 +63,10 @@ export default function FantasyDraftBoard() {
           <h1>Fantasy draft command center</h1>
           <p>Tap <strong>X</strong> when someone else takes a player. Tap <strong>D</strong> for your pick. Everything saves automatically on this device.</p>
         </div>
-        <button className="button ghost" type="button" onClick={resetDraft}>Reset board</button>
+        <div className="draft-hero-actions">
+          <Link className="button" href="/fantasy-team">View My Team</Link>
+          <button className="button ghost" type="button" onClick={resetDraft}>Reset board</button>
+        </div>
       </section>
 
       <section className="draft-stats" aria-live="polite">
