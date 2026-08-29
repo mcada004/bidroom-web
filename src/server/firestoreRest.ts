@@ -79,10 +79,15 @@ function parseErrorMessage(payload: unknown): string {
   return typeof message === "string" && message.trim() ? message : "Firestore request failed.";
 }
 
-export async function verifyFirebaseIdToken(
+export type VerifiedFirebaseUser = {
+  uid: string;
+  email: string | null;
+};
+
+export async function verifyFirebaseUser(
   idToken: string,
   firebaseApiKey: string
-): Promise<string> {
+): Promise<VerifiedFirebaseUser> {
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(
       firebaseApiKey
@@ -108,12 +113,23 @@ export async function verifyFirebaseIdToken(
     throw new Error("Auth token did not map to a Firebase user.");
   }
 
-  const uid = (users[0] as Record<string, unknown>).localId;
+  const user = users[0] as Record<string, unknown>;
+  const uid = user.localId;
   if (typeof uid !== "string" || !uid.trim()) {
     throw new Error("Unable to resolve user ID from auth token.");
   }
 
-  return uid;
+  return {
+    uid,
+    email: typeof user.email === "string" && user.email.trim() ? user.email : null,
+  };
+}
+
+export async function verifyFirebaseIdToken(
+  idToken: string,
+  firebaseApiKey: string
+): Promise<string> {
+  return (await verifyFirebaseUser(idToken, firebaseApiKey)).uid;
 }
 
 export async function getTripCreatedByUid(projectId: string, tripId: string): Promise<string | null> {
