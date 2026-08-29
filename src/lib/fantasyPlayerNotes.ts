@@ -81,8 +81,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
   },
   "20": {
-    "note": "The right-ankle sprain creates too much early-season uncertainty for the 2/3 turn. Pass at picks 24/25; reconsider at pick 48 only if he is expected to miss no games and has resumed full practice.",
-    "source": "https://www.reuters.com/sports/report-raiders-rb-ashton-jeanty-believed-have-sprained-ankle--flm-2026-08-24/"
+    "note": "Still on the mend after the right-ankle sprain, and Las Vegas says both Jeanty and Mike Washington are preparing for meaningful work. Drop to No. 27 and pass at picks 24/25 unless Jeanty logs a full practice before the draft.",
+    "source": "https://www.raiders.com/news/quick-hits-klint-kubiak-enters-critical-roster-evaluation-period-with-preseason-complete"
   },
   "21": {
     "note": "Extension complete; cleared for full camp participation.",
@@ -225,8 +225,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
   },
   "56": {
-    "note": "Woody Marks produced 43 yards and a touchdown on five opening-drive touches, confirming a meaningful split. Montgomery retains the stronger goal-line profile, but his ceiling is lower than a true lead back's.",
-    "source": "https://www.nfl.com/news/2026-nfl-preseason-week-2-what-we-learned-thursday-games"
+    "note": "Woody Marks is now close to a 50/50 role. Montgomery remains the preferred goal-line back, but the committee caps his weekly ceiling; move him to No. 61 and avoid paying a Round 5 price.",
+    "source": "https://www.draftsharks.com/article/fantasy-football-risers-and-fallers"
   },
   "57": {
     "note": "Six-point passing TD value; prioritize projected passing volume at market price.",
@@ -265,8 +265,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
   },
   "66": {
-    "note": "Value target: custom board is materially ahead of market price.",
-    "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
+    "note": "Tennessee is signaling a near-even Pollard–Tyjae Spears split. Pollard falls to No. 74; do not take him at his Round 7 market price when the backfield ceiling is divided.",
+    "source": "https://www.draftsharks.com/article/fantasy-football-risers-and-fallers"
   },
   "67": {
     "note": "Six-point passing TD adjustment applied; do not force ahead of the two-flex RB/WR core.",
@@ -337,8 +337,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
   },
   "84": {
-    "note": "Depth pick; prefer path to volume over name value.",
-    "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
+    "note": "Turned a short pass into a 37-yard gain in Tua Tagovailoa's efficient preseason appearance. Encouraging usage, but one play does not change his No. 84 price-sensitive TE rank.",
+    "source": "https://www.nfl.com/news/2026-nfl-preseason-week-3-what-we-learned-friday-games"
   },
   "85": {
     "note": "Depth pick; prefer path to volume over name value.",
@@ -425,8 +425,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://www.buffalorumblings.com/buffalo-bills-news/139068/buffalo-bills-te-dalton-kincaid-managing-broken-pinky-finger-per-report"
   },
   "106": {
-    "note": "Dontayvion Wicks is running in Philadelphia's two-WR sets while Lemon is working primarily in three-WR personnel. The thinner snap floor makes Lemon a late flier only.",
-    "source": "https://www.fantasylife.com/articles/fantasy/training-camp-updates-news-and-notes-luther-burden-back-on-the-field"
+    "note": "Played 17 snaps and drew five targets, but caught only three for three yards and had a drop turn into an interception. The mixed slot/outside role is useful; the execution drops him to No. 122 and makes him a late flier only.",
+    "source": "https://www.nfl.com/news/2026-nfl-preseason-week-3-what-we-learned-friday-games"
   },
   "107": {
     "note": "First-team chemistry with Jayden Daniels is translating to practice touchdowns, and the half-PPR market has moved near pick 111. Treat him as a Round 9-10 target, while Tunsil's injury caps the offense's ceiling.",
@@ -461,16 +461,16 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
   },
   "115": {
-    "note": "Trey Benson was waived/injured and James Conner remains out after foot surgery, leaving Allgeier as Arizona's healthiest proven back while Love recovers. Target after pick 120; the role can produce early-season FLEX value.",
-    "source": "https://www.cbssports.com/fantasy/football/news/trey-benson-cut-by-cardinals/"
+    "note": "Arizona could lean on Allgeier in Week 1 while Jeremiyah Love and James Conner recover. Move him to No. 108; he is the healthier short-term volume bet, but not a reach before the Round 9/10 turn.",
+    "source": "https://www.draftsharks.com/article/fantasy-football-risers-and-fallers"
   },
   "116": {
     "note": "Value target: custom board is materially ahead of market price.",
     "source": "https://g.espncdn.com/s/ffldraftkit/26/NFL26_CS_PPR300.pdf?adddata=2026CS_PPR300"
   },
   "117": {
-    "note": "Exploded for 43 yards and a touchdown on five touches with Houston's opening offense. His receiving ability and growing split with Montgomery create a Round 11-12 upside target.",
-    "source": "https://www.nfl.com/news/2026-nfl-preseason-week-2-what-we-learned-thursday-games"
+    "note": "The Houston backfield is trending toward a near-even Marks–Montgomery split. Marks rises to No. 110 and has standalone receiving value plus handcuff upside; take him around his Round 10 market price.",
+    "source": "https://www.draftsharks.com/article/fantasy-football-risers-and-fallers"
   },
   "118": {
     "note": "Six-point passing TD adjustment applied; do not force ahead of the two-flex RB/WR core.",
@@ -625,8 +625,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://www.fantasylife.com/articles/fantasy/training-camp-news-and-updates-for-fantasy-football-alec-pierce"
   },
   "156": {
-    "note": "The explosive rookie is the next man up if Jeanty's ankle costs games. Treat him as a late contingency target after pick 160 only if a meaningful Jeanty absence is confirmed; otherwise use waivers.",
-    "source": "https://www.reuters.com/sports/report-raiders-rb-ashton-jeanty-believed-have-sprained-ankle--flm-2026-08-24/"
+    "note": "Ran eight times for 49 yards with the first team, and Las Vegas says he is preparing to play a lot while Jeanty heals. Move to No. 132; he is a legitimate late-round contingency pick, especially if Jeanty misses another full practice.",
+    "source": "https://www.nfl.com/news/raiders-klint-kubiak-really-excited-about-ashton-jeanty-mike-washington-jr"
   },
   "157": {
     "note": "Rounds 13-15: Strong tackle floor for an edge. Once you draft one DL, skip every remaining DL.",
@@ -729,8 +729,8 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://www.espn.com/fantasy/football/story/_/page/FFPreseasonRank26IDP/nfl-fantasy-football-draft-rankings-2026-idp"
   },
   "182": {
-    "note": "A second costly preseason mistake, Devin Singletary's stronger showing and Najee Harris' arrival leave Tracy's roster spot and weekly role uncertain. Do not use one of five bench spots on him.",
-    "source": "https://nypost.com/2026/08/22/sports/tyrone-tracys-woes-continue-in-giants-preseason-win-over-dolphins/"
+    "note": "Rotated snap-for-snap with Najee Harris and flashed a 37-yard touchdown, but his uneven preseason and crowded room keep the floor low. Move to No. 190; leave him for waivers with only five bench spots.",
+    "source": "https://www.nfl.com/news/2026-nfl-preseason-week-3-what-we-learned-friday-games"
   },
   "183": {
     "note": "Value target: custom board is materially ahead of market price.",
@@ -785,16 +785,16 @@ export const FANTASY_PLAYER_NOTES: Record<number, FantasyPlayerNote> = {
     "source": "https://www.espn.com/fantasy/football/story/_/page/FFPreseasonRank26IDP/nfl-fantasy-football-draft-rankings-2026-idp"
   },
   "196": {
-    "note": "Expected to miss roughly two months with the right-hamstring injury, likely costing at least the first five games. In a five-bench league, remove him from the draftable pool and revisit on waivers near his return.",
-    "source": "https://www.espn.com/nfl/story/_/id/49642899/saints-rookie-wr-jordyn-tyson-miss-two-months"
+    "note": "Played snap-for-snap with Tyrone Tracy, gained 39 yards on 11 carries, and added a 20-yard catch. Add at No. 176 as a late committee/goal-line flier behind Cam Skattebo—not as a standalone weekly starter.",
+    "source": "https://www.nfl.com/news/2026-nfl-preseason-week-3-what-we-learned-friday-games"
   },
   "197": {
     "note": "Final rounds: Near-line usage offers a usable weekly floor. Once you draft one DB, skip every remaining DB.",
     "source": "https://www.espn.com/fantasy/football/story/_/page/FFPreseasonRank26IDP/nfl-fantasy-football-draft-rankings-2026-idp"
   },
   "198": {
-    "note": "Tore his ACL in joint practice and will miss the entire 2026 season. Remove from every draft list.",
-    "source": "https://www.nfl.com/news/texans-wr-jayden-higgins-torn-acl-out-2026-season"
+    "note": "Tennessee is trending toward a near-even Pollard–Spears split. Add Spears at No. 134; he carries standalone receiving value and becomes a high-upside pick if Pollard misses time.",
+    "source": "https://www.draftsharks.com/article/fantasy-football-risers-and-fallers"
   },
   "199": {
     "note": "Final rounds: Slot role supplies tackles and big plays. Once you draft one DB, skip every remaining DB.",
