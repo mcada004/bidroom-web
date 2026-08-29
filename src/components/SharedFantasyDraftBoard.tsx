@@ -56,6 +56,7 @@ export default function SharedFantasyDraftBoard() {
   const [joining, setJoining] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [shareLabel, setShareLabel] = useState("Share board");
 
   const isAdmin = Boolean(
     !authLoading && user && !user.isAnonymous && user.email?.toLowerCase() === ADMIN_EMAIL
@@ -122,17 +123,35 @@ export default function SharedFantasyDraftBoard() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [selectedPlayer]);
 
-  const mine = useMemo(
+  const brianTeam = useMemo(
     () => PLAYERS.filter((player) => draft.picks[String(player[0])]?.status === "D"),
     [draft.picks]
   );
+  const guestTeam = useMemo(() => {
+    if (isAdmin || !activeName) return [];
+    const normalizedActiveName = activeName.toLocaleLowerCase();
+
+    return PLAYERS.filter((player) => {
+      const pick = draft.picks[String(player[0])];
+      return pick?.status === "X" && (
+        (Boolean(user) && pick.actorUid === user?.uid) ||
+        pick.actorName.toLocaleLowerCase() === normalizedActiveName
+      );
+    });
+  }, [activeName, draft.picks, isAdmin, user]);
+  const team = isAdmin ? brianTeam : guestTeam;
+  const teamRanks = useMemo(() => new Set(team.map((player) => player[0])), [team]);
   const away = useMemo(
-    () => PLAYERS.filter((player) => draft.picks[String(player[0])]?.status === "X"),
-    [draft.picks]
+    () => PLAYERS.filter((player) => {
+      const pick = draft.picks[String(player[0])];
+      if (!pick) return false;
+      return isAdmin ? pick.status === "X" : !teamRanks.has(player[0]);
+    }),
+    [draft.picks, isAdmin, teamRanks]
   );
   const filledIdp = useMemo(
-    () => new Set(mine.filter((player) => IDP_POSITIONS.has(player[2])).map((player) => player[2])),
-    [mine]
+    () => new Set(team.filter((player) => IDP_POSITIONS.has(player[2])).map((player) => player[2])),
+    [team]
   );
   const available = useMemo(
     () => PLAYERS.filter(
@@ -230,6 +249,27 @@ export default function SharedFantasyDraftBoard() {
     }
   }
 
+  async function shareBoard() {
+    const url = `${window.location.origin}/fantasy-draft/shared`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Live fantasy draft room",
+          text: "Join our shared fantasy football draft board.",
+          url,
+        });
+        setShareLabel("Shared");
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareLabel("Link copied");
+      }
+      window.setTimeout(() => setShareLabel("Share board"), 2000);
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === "AbortError") return;
+      setError("Unable to share automatically. Copy the page address from your browser.");
+    }
+  }
+
   return (
     <main className="draft-page shared-draft-page">
       <section className="shared-draft-hero">
@@ -239,9 +279,10 @@ export default function SharedFantasyDraftBoard() {
             {connection === "live" ? "Live shared board" : connection === "connecting" ? "Connecting" : "Connection interrupted"}
           </div>
           <h1>Draft room</h1>
-          <p>Everyone sees the same board. Guests enter only a name; Brian’s Bidroom login controls corrections and resets.</p>
+          <p>Everyone sees the same board, and every username gets its own live roster. Brian’s login controls corrections and resets.</p>
         </div>
         <div className="shared-hero-actions">
+          <button className="button secondary" type="button" onClick={shareBoard}>{shareLabel}</button>
           <Link className="button secondary" href="/fantasy-draft">Private board</Link>
           {isAdmin ? (
             <button className="button ghost" type="button" disabled={resetting} onClick={resetBoard}>{resetting ? "Resetting…" : "Reset board"}</button>
@@ -280,17 +321,17 @@ export default function SharedFantasyDraftBoard() {
 
       <section className="draft-stats" aria-live="polite">
         <article><span>{position === "ALL" ? "Best available" : `Best ${position}`}</span><strong>{displayedAvailable[0] ? `${displayedAvailable[0][1]} · ${displayedAvailable[0][2]}` : "None available"}</strong></article>
-        <article><span>Brian’s roster</span><strong>{mine.length} / 17</strong></article>
+        <article><span>{isAdmin ? "Brian’s roster" : "Your roster"}</span><strong>{team.length} / 17</strong></article>
         <article><span>{position === "ALL" ? "Remaining" : `${position} remaining`}</span><strong>{displayedAvailable.length}</strong></article>
       </section>
 
       <section className="draft-team shared-my-team" aria-labelledby="shared-team-title">
         <div className="draft-section-heading">
-          <h2 id="shared-team-title">Brian’s team</h2>
-          <span>{isAdmin ? "Tap a player for notes · controls edit" : "Updates live for everyone"}</span>
+          <h2 id="shared-team-title">{isAdmin ? "Brian’s team" : "Your team"}</h2>
+          <span>{isAdmin ? "Tap a player for notes · controls edit" : "Players you draft appear here automatically"}</span>
         </div>
         <div className="draft-team-list">
-          {mine.length ? mine.map((player) => (
+          {team.length ? team.map((player) => (
             <article className="fantasy-roster-player" key={player[0]}>
               <button className="fantasy-player-info" type="button" onClick={() => setSelectedPlayer(player)}>
                 <span>{player[2]}</span><strong>{player[1]}</strong><small>#{player[0]} · {player[3]}</small>
@@ -353,10 +394,11 @@ export default function SharedFantasyDraftBoard() {
                       ) : (
                         <button
                           type="button"
-                          className="draft-x shared-taken-button"
+                          className="draft-d shared-mine-button"
+                          aria-label={`Draft ${player[1]} to ${activeName ?? "your"} team`}
                           disabled={!activeName || busyRank === player[0]}
                           onClick={() => markDrafted(player, "X")}
-                        >Taken</button>
+                        >Draft</button>
                       )}
                     </div>
                   </td>
