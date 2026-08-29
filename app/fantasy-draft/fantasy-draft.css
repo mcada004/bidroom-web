@@ -21,6 +21,7 @@
 .draft-hero p { margin: 0; max-width: 680px; color: var(--muted); }
 .draft-hero p strong { color: var(--ink); }
 .draft-kicker { text-transform: uppercase; letter-spacing: .18em; font-size: 12px; }
+.draft-hero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .draft-stats {
   display: grid;
