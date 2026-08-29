@@ -21,7 +21,7 @@ export default function FantasyTeamPage() {
         <Link className="button secondary" href="/fantasy-draft">Back to Draft Board</Link>
       </header>
       <div className="fantasy-team-only">
-        <FantasyDraftBoard />
+        <FantasyDraftBoard rosterOnly />
       </div>
     </div>
   );
