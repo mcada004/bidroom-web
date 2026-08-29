@@ -13,12 +13,14 @@ const PLAYERS: readonly Player[] = [[1,"Jahmyr Gibbs","RB","DET","CLEAR"],[2,"Bi
 const STORAGE_KEY = "brian-2026-fantasy-draft-status-v1";
 const IDP_POSITIONS = new Set(["LB", "DL", "DB"]);
 const POSITION_ORDER = ["QB", "RB", "WR", "TE", "DL", "LB", "DB", "K"];
+const BOARD_POSITIONS = POSITION_ORDER.filter((position) => PLAYERS.some((player) => player[2] === position));
 
 export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?: boolean }) {
   const [status, setStatus] = useState<StatusMap>({});
   const [loaded, setLoaded] = useState(false);
   const [teamPosition, setTeamPosition] = useState("ALL");
   const [teamSort, setTeamSort] = useState<TeamSort>("rank");
+  const [boardPosition, setBoardPosition] = useState("ALL");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   useEffect(() => {
@@ -68,6 +70,10 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
       return a[0] - b[0];
     });
   }, [mine, teamPosition, teamSort]);
+  const displayedAvailable = useMemo(
+    () => boardPosition === "ALL" ? available : available.filter((player) => player[2] === boardPosition),
+    [available, boardPosition],
+  );
 
   function toggle(rank: number, next: DraftStatus) {
     setStatus((current) => {
@@ -98,9 +104,9 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
       </section>
 
       <section className="draft-stats" aria-live="polite">
-        <article><span>Best available</span><strong>{available[0] ? `${available[0][1]} · ${available[0][2]}` : "Draft complete"}</strong></article>
+        <article><span>{boardPosition === "ALL" ? "Best available" : `Best ${boardPosition}`}</span><strong>{displayedAvailable[0] ? `${displayedAvailable[0][1]} · ${displayedAvailable[0][2]}` : "None available"}</strong></article>
         <article><span>My roster</span><strong>{mine.length} / 17</strong></article>
-        <article><span>Remaining</span><strong>{available.length}</strong></article>
+        <article><span>{boardPosition === "ALL" ? "Remaining" : `${boardPosition} remaining`}</span><strong>{displayedAvailable.length}</strong></article>
       </section>
 
       <section className="draft-team" aria-labelledby="my-team-title">
@@ -153,13 +159,22 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
             <h2 id="draft-board-title">Best available</h2>
             <span>Offense + IDP in one ranking</span>
           </div>
-          <div className="draft-legend"><i className="lb" />LB <i className="dl" />DL <i className="db" />DB</div>
+          <div className="draft-board-tools">
+            <label className="draft-position-filter">
+              <span>Filter position</span>
+              <select value={boardPosition} onChange={(event) => setBoardPosition(event.target.value)}>
+                <option value="ALL">All positions</option>
+                {BOARD_POSITIONS.map((position) => <option key={position} value={position}>{position}</option>)}
+              </select>
+            </label>
+            <div className="draft-legend"><i className="lb" />LB <i className="dl" />DL <i className="db" />DB</div>
+          </div>
         </div>
         <div className="draft-table-wrap">
           <table className="draft-table">
             <thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Team</th><th className="draft-flag">Flag</th><th>Status</th></tr></thead>
             <tbody>
-              {available.map((player) => (
+              {displayedAvailable.map((player) => (
                 <tr key={player[0]} className={`position-${player[2].toLowerCase()}`}>
                   <td>{player[0]}</td>
                   <td><button className="draft-player-detail" type="button" onClick={() => setSelectedPlayer(player)}>{player[1]}</button></td>
@@ -172,6 +187,9 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
                   </div></td>
                 </tr>
               ))}
+              {!displayedAvailable.length ? (
+                <tr><td colSpan={6} className="draft-empty-position">No {boardPosition} players remain.</td></tr>
+              ) : null}
             </tbody>
           </table>
         </div>
