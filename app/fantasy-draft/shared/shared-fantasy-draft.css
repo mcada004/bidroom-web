@@ -65,7 +65,8 @@
 .shared-roster-admin button:disabled, .shared-away-admin button:disabled { opacity: .45; cursor: wait; }
 
 .shared-draft-page .draft-board-card > .draft-section-heading { padding-bottom: 12px; }
-.shared-taken-button { width: auto !important; min-width: 54px; padding: 0 9px; }
+.shared-taken-button,
+.shared-mine-button { width: auto !important; min-width: 54px; padding: 0 9px; }
 
 .shared-drafted-list .draft-away-list { grid-template-columns: repeat(2, minmax(0,1fr)); }
 .shared-away-admin { display: flex; border-left: 1px solid #494541; }
