@@ -2,18 +2,29 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { signInAnonymously } from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  writeBatch,
+} from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
+import { auth, db } from "@/src/lib/firebase";
 import { FANTASY_PLAYER_NOTES } from "@/src/lib/fantasyPlayerNotes";
 import {
   emptySharedDraftState,
-  normalizeSharedDraftState,
+  type SharedDraftPick,
   type SharedDraftPickStatus,
   type SharedDraftState,
 } from "@/src/lib/sharedFantasyDraftState";
 import { PLAYERS, type Player } from "@/src/components/FantasyDraftBoard";
 
-const API_PATH = "/api/fantasy-draft/shared";
 const ADMIN_EMAIL = "mcada004@gmail.com";
+const DRAFT_ID = "brian-2026-live";
 const USERNAME_KEY = "brian-2026-shared-draft-username";
 const POSITIONS = ["QB", "RB", "WR", "TE", "DL", "LB", "DB"];
 const IDP_POSITIONS = new Set(["LB", "DL", "DB"]);
@@ -25,8 +36,12 @@ function normalizeUsername(value: string) {
   return cleaned.length >= 2 && cleaned.length <= 24 ? cleaned : null;
 }
 
-function playerByRank(rank: number | null) {
-  return rank ? PLAYERS.find((player) => player[0] === rank) ?? null : null;
+function actionErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = String((error as { code: unknown }).code);
+    if (code.includes("permission-denied")) return "That player was already taken, or your board permissions need refreshing.";
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 export default function SharedFantasyDraftBoard() {
@@ -38,6 +53,7 @@ export default function SharedFantasyDraftBoard() {
   const [usernameInput, setUsernameInput] = useState("");
   const [position, setPosition] = useState("ALL");
   const [busyRank, setBusyRank] = useState<number | null>(null);
+  const [joining, setJoining] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
@@ -55,38 +71,46 @@ export default function SharedFantasyDraftBoard() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    let inFlight = false;
+    setConnection("connecting");
+    const unsubscribe = onSnapshot(
+      collection(db, "fantasyDrafts", DRAFT_ID, "picks"),
+      (snapshot) => {
+        const picks: Record<string, SharedDraftPick> = {};
+        let latestUpdate: string | null = null;
 
-    async function syncBoard(initial = false) {
-      if (inFlight) return;
-      inFlight = true;
-      if (initial) setConnection("connecting");
-      try {
-        const response = await fetch(API_PATH, { cache: "no-store" });
-        const payload = (await response.json().catch(() => ({}))) as { state?: unknown; error?: unknown };
-        if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Unable to load the shared board.");
-        if (!active) return;
-        setDraft(normalizeSharedDraftState(payload.state));
+        for (const pickDocument of snapshot.docs) {
+          const rank = Number(pickDocument.id);
+          const data = pickDocument.data() as Record<string, unknown>;
+          if (!Number.isInteger(rank) || rank < 1 || rank > 200 || (data.status !== "X" && data.status !== "D")) continue;
+
+          const timestamp = data.updatedAt as { toDate?: () => Date } | undefined;
+          const updatedAt = timestamp?.toDate?.().toISOString() ?? "";
+          picks[String(rank)] = {
+            rank,
+            status: data.status,
+            actorName: typeof data.actorName === "string" ? data.actorName.slice(0, 24) : "Participant",
+            actorUid: typeof data.actorUid === "string" ? data.actorUid : null,
+            updatedAt,
+          };
+          if (updatedAt && (!latestUpdate || updatedAt > latestUpdate)) latestUpdate = updatedAt;
+        }
+
+        setDraft((current) => ({
+          picks,
+          revision: current.revision + 1,
+          updatedAt: latestUpdate,
+          lastAction: null,
+        }));
         setConnection("live");
         setError(null);
-      } catch (syncError) {
-        if (!active) return;
+      },
+      (syncError) => {
         setConnection("offline");
-        if (initial) setError(syncError instanceof Error ? syncError.message : "Unable to load the shared board.");
-      } finally {
-        inFlight = false;
+        setError(actionErrorMessage(syncError, "Unable to load the shared board."));
       }
-    }
+    );
 
-    void syncBoard(true);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void syncBoard();
-    }, 1500);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -120,48 +144,48 @@ export default function SharedFantasyDraftBoard() {
     () => position === "ALL" ? available : available.filter((player) => player[2] === position),
     [available, position]
   );
-  const lastPlayer = playerByRank(draft.lastAction?.rank ?? null);
-
-  function joinBoard(event: FormEvent<HTMLFormElement>) {
+  async function joinBoard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = normalizeUsername(usernameInput);
     if (!normalized) {
       setError("Name must be 2–24 characters.");
       return;
     }
-    window.localStorage.setItem(USERNAME_KEY, normalized);
-    setUsername(normalized);
-    setUsernameInput(normalized);
-    setError(null);
+    setJoining(true);
+    try {
+      if (!auth.currentUser) await signInAnonymously(auth);
+      window.localStorage.setItem(USERNAME_KEY, normalized);
+      setUsername(normalized);
+      setUsernameInput(normalized);
+      setError(null);
+    } catch (joinError) {
+      setError(actionErrorMessage(joinError, "Unable to join the board."));
+    } finally {
+      setJoining(false);
+    }
   }
 
-  async function sendAction(input: { action: "draft" | "set" | "undo" | "reset"; rank?: number; status?: SharedDraftPickStatus }) {
+  async function ensureFirebaseUser() {
+    return auth.currentUser ?? (await signInAnonymously(auth)).user;
+  }
+
+  async function markDrafted(player: Player, status: SharedDraftPickStatus) {
     if (!activeName) {
       setError("Enter your username before marking a player drafted.");
       return;
     }
-
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (isAdmin && user) headers.Authorization = `Bearer ${await user.getIdToken()}`;
-
-    const response = await fetch(API_PATH, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ ...input, username: activeName }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as { state?: unknown; error?: unknown };
-    if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Unable to update the board.");
-    setDraft(normalizeSharedDraftState(payload.state));
-    setConnection("live");
-    setError(null);
-  }
-
-  async function markDrafted(player: Player, status: SharedDraftPickStatus) {
     setBusyRank(player[0]);
     try {
-      await sendAction({ action: "draft", rank: player[0], status });
+      const currentUser = await ensureFirebaseUser();
+      await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(player[0])), {
+        status: isAdmin ? status : "X",
+        actorName: activeName,
+        actorUid: currentUser.uid,
+        updatedAt: serverTimestamp(),
+      });
+      setError(null);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Unable to mark that player.");
+      setError(actionErrorMessage(actionError, "Unable to mark that player."));
     } finally {
       setBusyRank(null);
     }
@@ -170,9 +194,20 @@ export default function SharedFantasyDraftBoard() {
   async function editPick(player: Player, action: "set" | "undo", status?: SharedDraftPickStatus) {
     setBusyRank(player[0]);
     try {
-      await sendAction({ action, rank: player[0], status });
+      if (action === "undo") {
+        await deleteDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(player[0])));
+      } else {
+        const currentUser = await ensureFirebaseUser();
+        await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(player[0])), {
+          status,
+          actorName: activeName,
+          actorUid: currentUser.uid,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      setError(null);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Unable to edit that pick.");
+      setError(actionErrorMessage(actionError, "Unable to edit that pick."));
     } finally {
       setBusyRank(null);
     }
@@ -182,9 +217,14 @@ export default function SharedFantasyDraftBoard() {
     if (!window.confirm("Reset every pick on the shared draft board for everyone?")) return;
     setResetting(true);
     try {
-      await sendAction({ action: "reset" });
+      const batch = writeBatch(db);
+      for (const rank of Object.keys(draft.picks)) {
+        batch.delete(doc(db, "fantasyDrafts", DRAFT_ID, "picks", rank));
+      }
+      await batch.commit();
+      setError(null);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Unable to reset the board.");
+      setError(actionErrorMessage(actionError, "Unable to reset the board."));
     } finally {
       setResetting(false);
     }
@@ -224,7 +264,7 @@ export default function SharedFantasyDraftBoard() {
               maxLength={24}
               autoFocus
             />
-            <button className="button" type="submit">Enter board</button>
+            <button className="button" type="submit" disabled={joining}>{joining ? "Joining…" : "Enter board"}</button>
           </form>
           <span>No email, password, or account required.</span>
         </section>
@@ -232,9 +272,7 @@ export default function SharedFantasyDraftBoard() {
         <section className="shared-session-bar">
           <div><span>Drafting as</span><strong>{activeName}</strong>{isAdmin ? <b>ADMIN</b> : null}</div>
           {!isAdmin ? <button type="button" onClick={() => { setUsername(""); setUsernameInput(activeName); }}>Change name</button> : null}
-          {draft.lastAction ? (
-            <p>{draft.lastAction.actorName} {draft.lastAction.action === "reset" ? "reset the board" : `${draft.lastAction.action === "undo" ? "undid" : "updated"} ${lastPlayer?.[1] ?? "a player"}`}</p>
-          ) : <p>Waiting for the first pick.</p>}
+          <p>{draft.updatedAt ? "Board updates instantly for everyone." : "Waiting for the first pick."}</p>
         </section>
       )}
 

@@ -6,6 +6,30 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isFantasyDraftAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email is string &&
+        request.auth.token.email == "mcada004@gmail.com";
+    }
+
+    function isValidSharedFantasyPick(allowMine) {
+      return request.resource.data.keys().hasOnly([
+          "status",
+          "actorName",
+          "actorUid",
+          "updatedAt"
+        ]) &&
+        (
+          request.resource.data.status == "X" ||
+          (allowMine && request.resource.data.status == "D")
+        ) &&
+        request.resource.data.actorName is string &&
+        request.resource.data.actorName.size() >= 2 &&
+        request.resource.data.actorName.size() <= 24 &&
+        request.resource.data.actorUid == request.auth.uid &&
+        request.resource.data.updatedAt == request.time;
+    }
+
     function tripDoc(tripId) {
       return get(/databases/$(database)/documents/trips/$(tripId));
     }
@@ -285,6 +309,25 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && isValidLinkPreviewPayload(request.resource.data);
       allow delete: if false;
+    }
+
+    match /fantasyDrafts/{draftId}/picks/{pickId} {
+      // Anyone with the shared link can watch the draft without an account.
+      allow read: if draftId == "brian-2026-live";
+
+      // Username-only guests sign in anonymously and can mark an available player taken.
+      // Brian's verified login can also add his own picks and correct/reset the board.
+      allow create: if draftId == "brian-2026-live" &&
+        pickId.matches('^[0-9]{1,3}$') &&
+        isSignedIn() &&
+        isValidSharedFantasyPick(isFantasyDraftAdmin());
+
+      allow update: if draftId == "brian-2026-live" &&
+        pickId.matches('^[0-9]{1,3}$') &&
+        isFantasyDraftAdmin() &&
+        isValidSharedFantasyPick(true);
+
+      allow delete: if draftId == "brian-2026-live" && isFantasyDraftAdmin();
     }
   }
 }
