@@ -21,7 +21,7 @@ import {
   type SharedDraftPickStatus,
   type SharedDraftState,
 } from "@/src/lib/sharedFantasyDraftState";
-import { PLAYERS, type Player } from "@/src/components/FantasyDraftBoard";
+import { getFantasyPlayerId, PLAYERS, type Player } from "@/src/components/FantasyDraftBoard";
 
 const ADMIN_EMAIL = "mcada004@gmail.com";
 const DRAFT_ID = "brian-2026-live";
@@ -124,7 +124,7 @@ export default function SharedFantasyDraftBoard() {
   }, [selectedPlayer]);
 
   const brianTeam = useMemo(
-    () => PLAYERS.filter((player) => draft.picks[String(player[0])]?.status === "D"),
+    () => PLAYERS.filter((player) => draft.picks[String(getFantasyPlayerId(player))]?.status === "D"),
     [draft.picks]
   );
   const guestTeam = useMemo(() => {
@@ -132,7 +132,7 @@ export default function SharedFantasyDraftBoard() {
     const normalizedActiveName = activeName.toLocaleLowerCase();
 
     return PLAYERS.filter((player) => {
-      const pick = draft.picks[String(player[0])];
+      const pick = draft.picks[String(getFantasyPlayerId(player))];
       return pick?.status === "X" && (
         (Boolean(user) && pick.actorUid === user?.uid) ||
         pick.actorName.toLocaleLowerCase() === normalizedActiveName
@@ -140,14 +140,15 @@ export default function SharedFantasyDraftBoard() {
     });
   }, [activeName, draft.picks, isAdmin, user]);
   const team = isAdmin ? brianTeam : guestTeam;
-  const teamRanks = useMemo(() => new Set(team.map((player) => player[0])), [team]);
+  const teamPlayerIds = useMemo(() => new Set(team.map(getFantasyPlayerId)), [team]);
   const away = useMemo(
     () => PLAYERS.filter((player) => {
-      const pick = draft.picks[String(player[0])];
+      const playerId = getFantasyPlayerId(player);
+      const pick = draft.picks[String(playerId)];
       if (!pick) return false;
-      return isAdmin ? pick.status === "X" : !teamRanks.has(player[0]);
+      return isAdmin ? pick.status === "X" : !teamPlayerIds.has(playerId);
     }),
-    [draft.picks, isAdmin, teamRanks]
+    [draft.picks, isAdmin, teamPlayerIds]
   );
   const filledIdp = useMemo(
     () => new Set(team.filter((player) => IDP_POSITIONS.has(player[2])).map((player) => player[2])),
@@ -155,7 +156,7 @@ export default function SharedFantasyDraftBoard() {
   );
   const available = useMemo(
     () => PLAYERS.filter(
-      (player) => !draft.picks[String(player[0])] && !(IDP_POSITIONS.has(player[2]) && filledIdp.has(player[2]))
+      (player) => !draft.picks[String(getFantasyPlayerId(player))] && !(IDP_POSITIONS.has(player[2]) && filledIdp.has(player[2]))
     ),
     [draft.picks, filledIdp]
   );
@@ -193,10 +194,11 @@ export default function SharedFantasyDraftBoard() {
       setError("Enter your username before marking a player drafted.");
       return;
     }
-    setBusyRank(player[0]);
+    const playerId = getFantasyPlayerId(player);
+    setBusyRank(playerId);
     try {
       const currentUser = await ensureFirebaseUser();
-      await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(player[0])), {
+      await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)), {
         status: isAdmin ? status : "X",
         actorName: activeName,
         actorUid: currentUser.uid,
@@ -211,13 +213,14 @@ export default function SharedFantasyDraftBoard() {
   }
 
   async function editPick(player: Player, action: "set" | "undo", status?: SharedDraftPickStatus) {
-    setBusyRank(player[0]);
+    const playerId = getFantasyPlayerId(player);
+    setBusyRank(playerId);
     try {
       if (action === "undo") {
-        await deleteDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(player[0])));
+        await deleteDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)));
       } else {
         const currentUser = await ensureFirebaseUser();
-        await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(player[0])), {
+        await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)), {
           status,
           actorName: activeName,
           actorUid: currentUser.uid,
@@ -283,7 +286,7 @@ export default function SharedFantasyDraftBoard() {
         </div>
         <div className="shared-hero-actions">
           <button className="button secondary" type="button" onClick={shareBoard}>{shareLabel}</button>
-          <Link className="button secondary" href="/fantasy-draft">Private board</Link>
+          {isAdmin ? <Link className="button secondary" href="/fantasy-draft">Private board</Link> : null}
           {isAdmin ? (
             <button className="button ghost" type="button" disabled={resetting} onClick={resetBoard}>{resetting ? "Resetting…" : "Reset board"}</button>
           ) : (
@@ -338,8 +341,8 @@ export default function SharedFantasyDraftBoard() {
               </button>
               {isAdmin ? (
                 <div className="shared-roster-admin">
-                  <button type="button" disabled={busyRank === player[0]} onClick={() => editPick(player, "set", "X")}>Other</button>
-                  <button type="button" disabled={busyRank === player[0]} onClick={() => editPick(player, "undo")}>×</button>
+                  <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "set", "X")}>Other</button>
+                  <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "undo")}>×</button>
                 </div>
               ) : null}
             </article>
@@ -380,14 +383,14 @@ export default function SharedFantasyDraftBoard() {
                             type="button"
                             className="draft-d shared-mine-button"
                             aria-label={`Add ${player[1]} to Brian's team`}
-                            disabled={busyRank === player[0]}
+                            disabled={busyRank === getFantasyPlayerId(player)}
                             onClick={() => markDrafted(player, "D")}
                           >Mine</button>
                           <button
                             type="button"
                             className="draft-x shared-taken-button"
                             aria-label={`Mark ${player[1]} drafted by another team`}
-                            disabled={busyRank === player[0]}
+                            disabled={busyRank === getFantasyPlayerId(player)}
                             onClick={() => markDrafted(player, "X")}
                           >Taken</button>
                         </>
@@ -396,7 +399,7 @@ export default function SharedFantasyDraftBoard() {
                           type="button"
                           className="draft-d shared-mine-button"
                           aria-label={`Draft ${player[1]} to ${activeName ?? "your"} team`}
-                          disabled={!activeName || busyRank === player[0]}
+                          disabled={!activeName || busyRank === getFantasyPlayerId(player)}
                           onClick={() => markDrafted(player, "X")}
                         >Draft</button>
                       )}
@@ -414,7 +417,7 @@ export default function SharedFantasyDraftBoard() {
         <summary>Drafted by others ({away.length})</summary>
         <div className="draft-away-list">
           {away.map((player) => {
-            const pick = draft.picks[String(player[0])];
+            const pick = draft.picks[String(getFantasyPlayerId(player))];
             return (
               <article className="draft-away-player" key={player[0]}>
                 <button className="draft-away-info" type="button" onClick={() => setSelectedPlayer(player)}>
@@ -422,8 +425,8 @@ export default function SharedFantasyDraftBoard() {
                 </button>
                 {isAdmin ? (
                   <div className="shared-away-admin">
-                    <button type="button" disabled={busyRank === player[0]} onClick={() => editPick(player, "set", "D")}>Mine</button>
-                    <button type="button" disabled={busyRank === player[0]} onClick={() => editPick(player, "undo")}>Undo</button>
+                    <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "set", "D")}>Mine</button>
+                    <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "undo")}>Undo</button>
                   </div>
                 ) : null}
               </article>
@@ -438,8 +441,8 @@ export default function SharedFantasyDraftBoard() {
             <button className="fantasy-note-close" type="button" aria-label="Close player notes" onClick={() => setSelectedPlayer(null)}>×</button>
             <p className="fantasy-note-meta">#{selectedPlayer[0]} · {selectedPlayer[2]} · {selectedPlayer[3]}</p>
             <h2 id="shared-note-title">{selectedPlayer[1]}</h2>
-            <p className="fantasy-note-copy">{FANTASY_PLAYER_NOTES[selectedPlayer[0]]?.note ?? "No additional draft note."}</p>
-            {FANTASY_PLAYER_NOTES[selectedPlayer[0]]?.source ? <a href={FANTASY_PLAYER_NOTES[selectedPlayer[0]].source} target="_blank" rel="noreferrer">Open source ↗</a> : null}
+            <p className="fantasy-note-copy">{FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)]?.note ?? "No additional draft note."}</p>
+            {FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)]?.source ? <a href={FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)].source} target="_blank" rel="noreferrer">Open source ↗</a> : null}
           </section>
         </div>
       ) : null}
