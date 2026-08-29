@@ -310,7 +310,7 @@ export default function SharedFantasyDraftBoard() {
         <div className="draft-section-heading">
           <div>
             <h2 id="shared-board-title">Best available</h2>
-            <span>Click a name for Brian’s draft notes</span>
+            <span>{isAdmin ? "Mine adds to your roster · Taken removes for everyone" : "Click a name for Brian’s draft notes"}</span>
           </div>
           <label className="draft-position-filter">
             <span>Filter position</span>
@@ -333,15 +333,31 @@ export default function SharedFantasyDraftBoard() {
                   <td className="draft-flag">{player[4]}</td>
                   <td>
                     <div className="draft-actions">
-                      <button
-                        type="button"
-                        className="draft-x shared-taken-button"
-                        disabled={!activeName || busyRank === player[0]}
-                        onClick={() => markDrafted(player, "X")}
-                      >{isAdmin ? "X" : "Taken"}</button>
                       {isAdmin ? (
-                        <button type="button" className="draft-d" disabled={busyRank === player[0]} onClick={() => markDrafted(player, "D")}>D</button>
-                      ) : null}
+                        <>
+                          <button
+                            type="button"
+                            className="draft-d shared-mine-button"
+                            aria-label={`Add ${player[1]} to Brian's team`}
+                            disabled={busyRank === player[0]}
+                            onClick={() => markDrafted(player, "D")}
+                          >Mine</button>
+                          <button
+                            type="button"
+                            className="draft-x shared-taken-button"
+                            aria-label={`Mark ${player[1]} drafted by another team`}
+                            disabled={busyRank === player[0]}
+                            onClick={() => markDrafted(player, "X")}
+                          >Taken</button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="draft-x shared-taken-button"
+                          disabled={!activeName || busyRank === player[0]}
+                          onClick={() => markDrafted(player, "X")}
+                        >Taken</button>
+                      )}
                     </div>
                   </td>
                 </tr>
