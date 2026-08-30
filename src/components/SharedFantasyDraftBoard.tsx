@@ -21,7 +21,7 @@ import {
   type SharedDraftPickStatus,
   type SharedDraftState,
 } from "@/src/lib/sharedFantasyDraftState";
-import { getFantasyPlayerId, PLAYERS, type Player } from "@/src/components/FantasyDraftBoard";
+import { getFantasyPlayerId, LastDraftedPlayerCard, PLAYERS, type Player } from "@/src/components/FantasyDraftBoard";
 
 const ADMIN_EMAIL = "mcada004@gmail.com";
 const DRAFT_ID = "brian-2026-live";
@@ -81,7 +81,7 @@ export default function SharedFantasyDraftBoard() {
 
         for (const pickDocument of snapshot.docs) {
           const rank = Number(pickDocument.id);
-          const data = pickDocument.data() as Record<string, unknown>;
+          const data = pickDocument.data({ serverTimestamps: "estimate" }) as Record<string, unknown>;
           if (!Number.isInteger(rank) || rank < 1 || rank > 200 || (data.status !== "X" && data.status !== "D")) continue;
 
           const timestamp = data.updatedAt as { toDate?: () => Date } | undefined;
@@ -200,7 +200,7 @@ export default function SharedFantasyDraftBoard() {
       const currentUser = await ensureFirebaseUser();
       await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)), {
         status: isAdmin ? status : "X",
-        actorName: activeName,
+        actorName: isAdmin && status === "X" ? "Other team" : activeName,
         actorUid: currentUser.uid,
         updatedAt: serverTimestamp(),
       });
@@ -222,7 +222,7 @@ export default function SharedFantasyDraftBoard() {
         const currentUser = await ensureFirebaseUser();
         await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)), {
           status,
-          actorName: activeName,
+          actorName: status === "X" ? "Other team" : activeName,
           actorUid: currentUser.uid,
           updatedAt: serverTimestamp(),
         });
@@ -327,6 +327,8 @@ export default function SharedFantasyDraftBoard() {
         <article><span>{isAdmin ? "Brian’s roster" : "Your roster"}</span><strong>{team.length} / 17</strong></article>
         <article><span>{position === "ALL" ? "Remaining" : `${position} remaining`}</span><strong>{displayedAvailable.length}</strong></article>
       </section>
+
+      <LastDraftedPlayerCard picks={draft.picks} connection={connection} onSelect={setSelectedPlayer} />
 
       <section className="draft-team shared-my-team" aria-labelledby="shared-team-title">
         <div className="draft-section-heading">
