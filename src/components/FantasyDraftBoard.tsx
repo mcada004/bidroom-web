@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/src/context/AuthContext";
 import { db } from "@/src/lib/firebase";
 import { FANTASY_PLAYER_NOTES } from "@/src/lib/fantasyPlayerNotes";
+import { getDraftValueOpinion, getLastDraftedPick, type SharedDraftPick } from "@/src/lib/sharedFantasyDraftState";
 
 export type Player = readonly [rank: number, name: string, position: string, team: string, flag: string];
 type DraftStatus = "X" | "D";
@@ -80,6 +81,44 @@ const POSITION_ORDER = ["QB", "RB", "WR", "TE", "DL", "LB", "DB", "K"];
 const BOARD_POSITIONS = POSITION_ORDER.filter((position) => RANKED_PLAYERS.some((player) => player[2] === position));
 type ConnectionState = "connecting" | "live" | "offline";
 
+export function LastDraftedPlayerCard({ picks, connection, onSelect }: {
+  picks: Record<string, SharedDraftPick>;
+  connection: ConnectionState;
+  onSelect: (player: Player) => void;
+}) {
+  const latest = getLastDraftedPick(picks);
+  const player = latest ? RANKED_PLAYERS.find((candidate) => getFantasyPlayerId(candidate) === latest.pick.rank) : null;
+  const opinion = latest && player ? getDraftValueOpinion(player[0], latest.pickNumber) : null;
+
+  return (
+    <section className={`draft-last-pick ${opinion?.tone ?? "empty"}`} aria-labelledby="last-drafted-title" aria-live="polite" aria-atomic="true">
+      <div className="draft-last-pick-heading">
+        <h2 id="last-drafted-title">Last drafted</h2>
+        <span>{connection === "live" ? "Live · all teams" : connection === "offline" ? "Offline · last synced pick" : "Connecting…"}</span>
+      </div>
+      {latest && player && opinion ? (
+        <>
+          <div className="draft-last-pick-body">
+            <div>
+              <button className="draft-last-pick-player" type="button" onClick={() => onSelect(player)} aria-label={`Draft notes for ${player[1]}`}>{player[1]}</button>
+              <p className="draft-last-pick-meta">{player[2]} · {player[3]} · Drafted by {latest.pick.status === "D" ? "Brian" : latest.pick.actorName}</p>
+              <div className="draft-last-pick-numbers"><span>Recorded pick <strong>#{latest.pickNumber}</strong></span><span>Board rank <strong>#{player[0]}</strong></span></div>
+            </div>
+            <div className="draft-last-pick-opinion">
+              <strong className="draft-value-badge">{opinion.label}</strong>
+              <p><b>My take:</b> {opinion.take}</p>
+              <span>{opinion.comparison}</span>
+            </div>
+          </div>
+          <p className="draft-last-pick-footnote">Rank-based take, not ADP. Pick number counts all marked players; log picks in order. Corrections update this card. Roster needs can justify paying up.</p>
+        </>
+      ) : (
+        <p className="draft-last-pick-placeholder">{connection === "connecting" ? "Loading the latest pick…" : Object.keys(picks).length ? "Waiting for a recorded pick timestamp…" : "No picks yet. Mark a player drafted and the reach/value verdict appears here."}</p>
+      )}
+    </section>
+  );
+}
+
 function readSavedStatus(): StatusMap {
   try {
     const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, unknown>;
@@ -107,6 +146,7 @@ function actionErrorMessage(error: unknown, fallback: string) {
 export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?: boolean }) {
   const { user, loading: authLoading } = useAuth();
   const [status, setStatus] = useState<StatusMap>({});
+  const [draftPicks, setDraftPicks] = useState<Record<string, SharedDraftPick>>({});
   const [loaded, setLoaded] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -131,22 +171,33 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
       collection(db, "fantasyDrafts", DRAFT_ID, "picks"),
       async (snapshot) => {
         const remoteStatus: StatusMap = {};
+        const remotePicks: Record<string, SharedDraftPick> = {};
         for (const pickDocument of snapshot.docs) {
           const playerId = Number(pickDocument.id);
-          const pickStatus = pickDocument.data().status;
+          const data = pickDocument.data({ serverTimestamps: "estimate" });
+          const pickStatus = data.status;
           if (Number.isInteger(playerId) && playerId >= 1 && playerId <= 200 && (pickStatus === "X" || pickStatus === "D")) {
             remoteStatus[playerId] = pickStatus;
+            const timestamp = data.updatedAt as { toDate?: () => Date } | undefined;
+            remotePicks[String(playerId)] = {
+              rank: playerId,
+              status: pickStatus,
+              actorName: typeof data.actorName === "string" ? data.actorName.slice(0, 24) : "Participant",
+              actorUid: typeof data.actorUid === "string" ? data.actorUid : null,
+              updatedAt: timestamp?.toDate?.().toISOString() ?? "",
+            };
           }
         }
+        setDraftPicks(remotePicks);
 
-        const missingSavedPicks = Object.entries(savedStatus).filter(([playerId]) => !remoteStatus[Number(playerId)]);
+        const missingSavedPicks = attemptedMigration ? [] : Object.entries(savedStatus).filter(([playerId]) => !remoteStatus[Number(playerId)]);
+        attemptedMigration = true;
         setStatus(missingSavedPicks.length ? { ...savedStatus, ...remoteStatus } : remoteStatus);
         setLoaded(true);
         setConnection("live");
         setError(null);
 
-        if (attemptedMigration || !missingSavedPicks.length) return;
-        attemptedMigration = true;
+        if (!missingSavedPicks.length) return;
         try {
           await runTransaction(db, async (transaction) => {
             const refs = missingSavedPicks.map(([playerId]) => doc(db, "fantasyDrafts", DRAFT_ID, "picks", playerId));
@@ -306,6 +357,8 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
         <article><span>My roster</span><strong>{mine.length} / 17</strong></article>
         <article><span>{boardPosition === "ALL" ? "Remaining" : `${boardPosition} remaining`}</span><strong>{displayedAvailable.length}</strong></article>
       </section>
+
+      <LastDraftedPlayerCard picks={draftPicks} connection={connection} onSelect={setSelectedPlayer} />
 
       <section className="draft-team" aria-labelledby="my-team-title">
         <div className="draft-section-heading">
