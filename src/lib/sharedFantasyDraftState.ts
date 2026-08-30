@@ -42,6 +42,47 @@ export function emptySharedDraftState(): SharedDraftState {
   return { picks: {}, revision: 0, updatedAt: null, lastAction: null };
 }
 
+/** Pick IDs are stable player IDs, not their current display ranks. */
+export function getLastDraftedPick(picks: Record<string, SharedDraftPick>) {
+  const recorded = Object.values(picks);
+  const timed = recorded.filter((pick) => Number.isFinite(Date.parse(pick.updatedAt)));
+  timed.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.rank - b.rank);
+  if (!timed[0]) return null;
+  return { pick: timed[0], pickNumber: recorded.length };
+}
+
+export function getDraftValueOpinion(boardRank: number, pickNumber: number) {
+  if (!Number.isInteger(boardRank) || !Number.isInteger(pickNumber) || boardRank < 1 || pickNumber < 1) {
+    throw new RangeError("Board rank and pick number must be positive integers.");
+  }
+  const difference = pickNumber - boardRank;
+  const slots = Math.abs(difference);
+  const comparison = difference === 0
+    ? "Exactly at our board rank."
+    : `${slots} spot${slots === 1 ? "" : "s"} ${difference > 0 ? "later" : "earlier"} than our board rank.`;
+
+  if (difference <= -12) return {
+    label: "Reach", tone: "reach", comparison,
+    take: "I’d have waited. This is at least a full round ahead of our board’s price.",
+  } as const;
+  if (difference <= -6) return {
+    label: "Slight reach", tone: "caution", comparison,
+    take: "A little early for me. Defensible if this fills a need or the tier is drying up.",
+  } as const;
+  if (difference >= 12) return {
+    label: "Great value", tone: "value", comparison,
+    take: "I like it. Getting this player at least a round after our ranking is a strong value.",
+  } as const;
+  if (difference >= 6) return {
+    label: "Good value", tone: "value", comparison,
+    take: "Nice pick. A useful discount on where I’d take this player.",
+  } as const;
+  return {
+    label: "Fair price", tone: "fair", comparison,
+    take: "No reach here. This is right around where I’d take this player.",
+  } as const;
+}
+
 function isPickStatus(value: unknown): value is SharedDraftPickStatus {
   return value === "X" || value === "D";
 }
