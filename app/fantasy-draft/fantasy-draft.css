@@ -66,6 +66,30 @@
 .draft-stats span, .draft-section-heading > span, .draft-section-heading div > span { display: block; color: var(--muted); font-size: 12px; }
 .draft-stats strong { display: block; margin-top: 3px; font-size: 18px; }
 
+.draft-last-pick { margin-bottom: 18px; padding: 20px; border: 1px solid var(--line); border-left: 4px solid #9c8d80; border-radius: var(--radius-lg); background: #fffaf4; box-shadow: var(--shadow); }
+.draft-last-pick.value { border-left-color: #267d40; }
+.draft-last-pick.caution { border-left-color: #a16a15; }
+.draft-last-pick.reach { border-left-color: #b43f37; }
+.draft-last-pick-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.draft-last-pick-heading h2 { margin: 0; font-size: 17px; }
+.draft-last-pick-heading > span { color: var(--muted); font-size: 11px; text-align: right; }
+.draft-last-pick-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.draft-last-pick-player { max-width: 100%; border: 0; border-bottom: 1px dashed #9c8d80; padding: 0 0 3px; background: transparent; color: var(--ink); font: 600 clamp(23px, 4vw, 32px)/1.15 "Iowan Old Style", Palatino, serif; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.draft-last-pick-player:hover { color: #17622d; }
+.draft-last-pick-player:focus-visible { outline: 2px solid #17622d; outline-offset: 4px; }
+.draft-last-pick-meta { margin: 8px 0 13px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.draft-last-pick-numbers { display: flex; flex-wrap: wrap; gap: 8px; }
+.draft-last-pick-numbers span { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--muted); font-size: 11px; }
+.draft-last-pick-numbers strong { color: var(--ink); font-size: 14px; margin-left: 4px; }
+.draft-value-badge { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #eee8df; color: #51453a; font-size: 12px; }
+.value .draft-value-badge { background: #e3f3e7; color: #17622d; }
+.caution .draft-value-badge { background: #fff0d3; color: #80500c; }
+.reach .draft-value-badge { background: #fce6e3; color: #952d26; }
+.draft-last-pick-opinion p { margin: 9px 0 5px; color: var(--ink); font-size: 14px; line-height: 1.5; }
+.draft-last-pick-opinion > span { color: var(--muted); font-size: 12px; }
+.draft-last-pick-footnote { margin: 16px 0 0; border-top: 1px solid var(--line); padding-top: 11px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.draft-last-pick-placeholder { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
 .draft-team { padding: 18px 20px; margin-bottom: 18px; }
 .draft-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .draft-section-heading h2 { margin: 0; font-size: 17px; }
@@ -220,6 +244,8 @@
 .fantasy-note-modal a { color: #17622d; font-size: 13px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
 
 @media (max-width: 720px) {
+  .draft-last-pick { padding: 16px; }
+  .draft-last-pick-body { grid-template-columns: 1fr; gap: 16px; }
   .app-shell { padding: 20px 12px 60px; }
   .draft-hero { align-items: flex-start; flex-direction: column; }
   .draft-stats { grid-template-columns: 1fr 1fr; }
