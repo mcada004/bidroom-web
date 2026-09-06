@@ -14,6 +14,8 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { db } from "@/src/lib/firebase";
+import { FantasyConductFilter, FantasyConductNotes } from "@/src/components/FantasyConductFilter";
+import { isConductExcluded, type ConductCategory } from "@/src/lib/fantasyConduct";
 import { FANTASY_PLAYER_NOTES } from "@/src/lib/fantasyPlayerNotes";
 import { getDraftValueOpinion, getLastDraftedPick, type SharedDraftPick } from "@/src/lib/sharedFantasyDraftState";
 
@@ -155,6 +157,8 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
   const [teamPosition, setTeamPosition] = useState("ALL");
   const [teamSort, setTeamSort] = useState<TeamSort>("rank");
   const [boardPosition, setBoardPosition] = useState("ALL");
+  const [conductCategories, setConductCategories] = useState<ConductCategory[]>([]);
+  const [includeClearedConduct, setIncludeClearedConduct] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const isAdmin = Boolean(
     !authLoading && user && !user.isAnonymous && user.email?.toLowerCase() === ADMIN_EMAIL
@@ -267,8 +271,8 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
     });
   }, [mine, teamPosition, teamSort]);
   const displayedAvailable = useMemo(
-    () => boardPosition === "ALL" ? available : available.filter((player) => player[2] === boardPosition),
-    [available, boardPosition],
+    () => available.filter((player) => (boardPosition === "ALL" || player[2] === boardPosition) && !isConductExcluded(player[1], conductCategories, includeClearedConduct)),
+    [available, boardPosition, conductCategories, includeClearedConduct],
   );
 
   async function toggle(player: Player, next: DraftStatus) {
@@ -422,6 +426,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
             <div className="draft-legend"><i className="lb" />LB <i className="dl" />DL <i className="db" />DB</div>
           </div>
         </div>
+        <FantasyConductFilter categories={conductCategories} includeCleared={includeClearedConduct} onCategories={setConductCategories} onIncludeCleared={setIncludeClearedConduct} hiddenCount={available.filter(player => (boardPosition === "ALL" || player[2] === boardPosition) && isConductExcluded(player[1], conductCategories, includeClearedConduct)).length} />
         <div className="draft-table-wrap">
           <table className="draft-table">
             <thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Team</th><th className="draft-flag">Flag</th><th>Status</th></tr></thead>
@@ -440,7 +445,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
                 </tr>
               ))}
               {!displayedAvailable.length ? (
-                <tr><td colSpan={6} className="draft-empty-position">No {boardPosition} players remain.</td></tr>
+                <tr><td colSpan={6} className="draft-empty-position">No available players match these filters. Try clearing a filter.</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -473,6 +478,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
             <button className="fantasy-note-close" type="button" aria-label="Close player notes" onClick={() => setSelectedPlayer(null)}>×</button>
             <p className="fantasy-note-meta">#{selectedPlayer[0]} · {selectedPlayer[2]} · {selectedPlayer[3]}</p>
             <h2 id="fantasy-note-title">{selectedPlayer[1]}</h2>
+            <FantasyConductNotes name={selectedPlayer[1]} />
             <p className="fantasy-note-copy">{FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)]?.note ?? "No additional draft note."}</p>
             {FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)]?.source ? (
               <a href={FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)].source} target="_blank" rel="noreferrer">Open source ↗</a>

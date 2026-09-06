@@ -260,3 +260,20 @@
   .draft-table th:first-child, .draft-table td:first-child { width: 42px; }
   .fantasy-note-modal { padding: 24px 20px; border-radius: 18px; }
 }
+
+.draft-conduct-filter { margin: 0 20px 16px; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; color: #172033; }
+.draft-conduct-filter summary { cursor: pointer; padding: 12px; font-weight: 700; font-size: 13px; }
+.draft-conduct-filter summary span { float: right; color: #475569; font-weight: 500; }
+.draft-conduct-filter fieldset { margin: 0; padding: 10px 12px 14px; border: 0; min-width: 0; }
+.draft-conduct-filter legend { font-size: 12px; font-weight: 600; }
+.draft-conduct-options { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 10px 0 16px; }
+.draft-conduct-filter label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.draft-conduct-filter input { width: 17px; height: 17px; flex-shrink: 0; accent-color: #166534; }
+.draft-conduct-filter p { font-size: 12px; line-height: 1.5; color: #475569; margin: 10px 0; }
+.draft-conduct-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.draft-conduct-footer button { background: white; color: #172033; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+.draft-conduct-notes { border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; padding: 12px 0; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+.draft-conduct-notes h3 { margin: 0 0 10px; font-size: 14px; }
+.draft-conduct-notes p { margin: 6px 0; }
+.draft-conduct-outcome { font-weight: 700; }
+.draft-conduct-notes a { display: inline-block; margin-right: 16px; }

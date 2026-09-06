@@ -14,6 +14,8 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { auth, db } from "@/src/lib/firebase";
+import { FantasyConductFilter, FantasyConductNotes } from "@/src/components/FantasyConductFilter";
+import { isConductExcluded, type ConductCategory } from "@/src/lib/fantasyConduct";
 import { FANTASY_PLAYER_NOTES } from "@/src/lib/fantasyPlayerNotes";
 import {
   emptySharedDraftState,
@@ -52,6 +54,8 @@ export default function SharedFantasyDraftBoard() {
   const [username, setUsername] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const [position, setPosition] = useState("ALL");
+  const [conductCategories, setConductCategories] = useState<ConductCategory[]>([]);
+  const [includeClearedConduct, setIncludeClearedConduct] = useState(false);
   const [busyRank, setBusyRank] = useState<number | null>(null);
   const [joining, setJoining] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -161,8 +165,8 @@ export default function SharedFantasyDraftBoard() {
     [draft.picks, filledIdp]
   );
   const displayedAvailable = useMemo(
-    () => position === "ALL" ? available : available.filter((player) => player[2] === position),
-    [available, position]
+    () => available.filter((player) => (position === "ALL" || player[2] === position) && !isConductExcluded(player[1], conductCategories, includeClearedConduct)),
+    [available, position, conductCategories, includeClearedConduct]
   );
   async function joinBoard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -366,6 +370,7 @@ export default function SharedFantasyDraftBoard() {
             </select>
           </label>
         </div>
+        <FantasyConductFilter categories={conductCategories} includeCleared={includeClearedConduct} onCategories={setConductCategories} onIncludeCleared={setIncludeClearedConduct} hiddenCount={available.filter(player => (position === "ALL" || player[2] === position) && isConductExcluded(player[1], conductCategories, includeClearedConduct)).length} />
         <div className="draft-table-wrap">
           <table className="draft-table">
             <thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Team</th><th className="draft-flag">Flag</th><th>Status</th></tr></thead>
@@ -409,7 +414,7 @@ export default function SharedFantasyDraftBoard() {
                   </td>
                 </tr>
               ))}
-              {!displayedAvailable.length ? <tr><td colSpan={6} className="draft-empty-position">No {position} players remain.</td></tr> : null}
+              {!displayedAvailable.length ? <tr><td colSpan={6} className="draft-empty-position">No available players match these filters. Try clearing a filter.</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -443,6 +448,7 @@ export default function SharedFantasyDraftBoard() {
             <button className="fantasy-note-close" type="button" aria-label="Close player notes" onClick={() => setSelectedPlayer(null)}>×</button>
             <p className="fantasy-note-meta">#{selectedPlayer[0]} · {selectedPlayer[2]} · {selectedPlayer[3]}</p>
             <h2 id="shared-note-title">{selectedPlayer[1]}</h2>
+            <FantasyConductNotes name={selectedPlayer[1]} />
             <p className="fantasy-note-copy">{FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)]?.note ?? "No additional draft note."}</p>
             {FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)]?.source ? <a href={FANTASY_PLAYER_NOTES[getFantasyPlayerId(selectedPlayer)].source} target="_blank" rel="noreferrer">Open source ↗</a> : null}
           </section>
