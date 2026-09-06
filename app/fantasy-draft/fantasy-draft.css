@@ -277,3 +277,11 @@
 .draft-conduct-notes p { margin: 6px 0; }
 .draft-conduct-outcome { font-weight: 700; }
 .draft-conduct-notes a { display: inline-block; margin-right: 16px; }
+
+.draft-player-search { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin: 0 20px 16px; }
+.draft-player-search label { display: grid; flex: 1 1 240px; gap: 6px; }
+.draft-player-search label > span { color: var(--muted); font-size: 12px; font-weight: 600; }
+.draft-player-search input { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; background: white; color: var(--ink); font: inherit; font-size: 16px; }
+.draft-player-search input:focus-visible { outline: 2px solid #17622d; outline-offset: 2px; }
+.draft-player-search button { border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: white; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.draft-search-count { padding-bottom: 12px; color: var(--muted); font-size: 12px; }

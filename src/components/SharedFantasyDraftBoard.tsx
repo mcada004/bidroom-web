@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 import { auth, db } from "@/src/lib/firebase";
+import FantasyPlayerSearch, { matchesPlayerName } from "@/src/components/FantasyPlayerSearch";
 import { FantasyConductFilter, FantasyConductNotes } from "@/src/components/FantasyConductFilter";
 import { isConductExcluded, type ConductCategory } from "@/src/lib/fantasyConduct";
 import { FANTASY_PLAYER_NOTES } from "@/src/lib/fantasyPlayerNotes";
@@ -54,6 +55,7 @@ export default function SharedFantasyDraftBoard() {
   const [username, setUsername] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const [position, setPosition] = useState("ALL");
+  const [playerQuery, setPlayerQuery] = useState("");
   const [conductCategories, setConductCategories] = useState<ConductCategory[]>([]);
   const [includeClearedConduct, setIncludeClearedConduct] = useState(false);
   const [busyRank, setBusyRank] = useState<number | null>(null);
@@ -165,8 +167,8 @@ export default function SharedFantasyDraftBoard() {
     [draft.picks, filledIdp]
   );
   const displayedAvailable = useMemo(
-    () => available.filter((player) => (position === "ALL" || player[2] === position) && !isConductExcluded(player[1], conductCategories, includeClearedConduct)),
-    [available, position, conductCategories, includeClearedConduct]
+    () => available.filter((player) => matchesPlayerName(player[1], playerQuery) && (position === "ALL" || player[2] === position) && !isConductExcluded(player[1], conductCategories, includeClearedConduct)),
+    [available, position, conductCategories, includeClearedConduct, playerQuery]
   );
   async function joinBoard(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -370,7 +372,8 @@ export default function SharedFantasyDraftBoard() {
             </select>
           </label>
         </div>
-        <FantasyConductFilter categories={conductCategories} includeCleared={includeClearedConduct} onCategories={setConductCategories} onIncludeCleared={setIncludeClearedConduct} hiddenCount={available.filter(player => (position === "ALL" || player[2] === position) && isConductExcluded(player[1], conductCategories, includeClearedConduct)).length} />
+        <FantasyPlayerSearch query={playerQuery} onQueryChange={setPlayerQuery} resultCount={displayedAvailable.length} />
+        <FantasyConductFilter categories={conductCategories} includeCleared={includeClearedConduct} onCategories={setConductCategories} onIncludeCleared={setIncludeClearedConduct} hiddenCount={available.filter(player => matchesPlayerName(player[1], playerQuery) && (position === "ALL" || player[2] === position) && isConductExcluded(player[1], conductCategories, includeClearedConduct)).length} />
         <div className="draft-table-wrap">
           <table className="draft-table">
             <thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Team</th><th className="draft-flag">Flag</th><th>Status</th></tr></thead>

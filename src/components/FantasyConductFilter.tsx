@@ -31,7 +31,7 @@ export function FantasyConductFilter({ categories, includeCleared, onCategories,
       <p>For informational purposes only. Based on linked news articles; see each player’s notes for the news source and reported outcome.</p>
       <p>Charges are not convictions. Reduced-charge pleas are included. Dismissed/declined cases and acquittals are excluded only if you select the option above.</p>
       <p>Manually curated public reports, reviewed September 6, 2026; coverage is incomplete. No listed record does not mean a clean record. Open a player’s notes for sources and outcomes.</p>
-      <div className="draft-conduct-footer"><span role="status">{hiddenCount} hidden by this filter at the current position</span><button type="button" onClick={() => { onCategories([]); onIncludeCleared(false); }}>Clear behavior filter</button></div>
+      <div className="draft-conduct-footer"><span role="status">{hiddenCount} hidden by this filter for the current position and search</span><button type="button" onClick={() => { onCategories([]); onIncludeCleared(false); }}>Clear behavior filter</button></div>
     </fieldset>
   </details>;
 }
