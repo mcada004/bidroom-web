@@ -7,12 +7,11 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
   writeBatch,
 } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
+import { createFantasyRoomPick } from "@/src/lib/createFantasyRoomPick";
+import { useFantasyRoomMembership } from "@/src/hooks/useFantasyRoomMembership";
 import { db } from "@/src/lib/firebase";
 import FantasyPlayerSearch, { matchesPlayerName } from "@/src/components/FantasyPlayerSearch";
 import { FantasyConductFilter, FantasyConductNotes } from "@/src/components/FantasyConductFilter";
@@ -76,7 +75,6 @@ export function getFantasyPlayerId(player: Player) {
 }
 
 export { RANKED_PLAYERS as PLAYERS };
-const STORAGE_KEY = "brian-2026-fantasy-draft-status-v1";
 const ADMIN_EMAIL = "mcada004@gmail.com";
 const DRAFT_ID = "brian-2026-live";
 const IDP_POSITIONS = new Set(["LB", "DL", "DB"]);
@@ -122,26 +120,10 @@ export function LastDraftedPlayerCard({ picks, connection, onSelect }: {
   );
 }
 
-function readSavedStatus(): StatusMap {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}") as Record<string, unknown>;
-    const saved: StatusMap = {};
-    for (const [key, status] of Object.entries(value)) {
-      const playerId = Number(key);
-      if (Number.isInteger(playerId) && playerId >= 1 && playerId <= 200 && (status === "X" || status === "D")) {
-        saved[playerId] = status;
-      }
-    }
-    return saved;
-  } catch {
-    return {};
-  }
-}
-
 function actionErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code: unknown }).code);
-    if (code.includes("permission-denied")) return "Sign in with Brian's account to change the private board.";
+    if (code.includes("permission-denied")) return "Refresh the board and sign in as Brian before drafting. Every pick requires a registered room username.";
   }
   return error instanceof Error ? error.message : fallback;
 }
@@ -166,16 +148,17 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
     !authLoading && user && !user.isAnonymous && user.email?.toLowerCase() === ADMIN_EMAIL
   );
 
+  const membership = useFantasyRoomMembership(isAdmin ? "Brian" : null, authLoading);
+
   useEffect(() => {
     if (authLoading || !isAdmin || !user) return;
 
-    const savedStatus = readSavedStatus();
-    let attemptedMigration = false;
     setConnection("connecting");
 
     const unsubscribe = onSnapshot(
       collection(db, "fantasyDrafts", DRAFT_ID, "picks"),
-      async (snapshot) => {
+      { includeMetadataChanges: true },
+      (snapshot) => {
         const remoteStatus: StatusMap = {};
         const remotePicks: Record<string, SharedDraftPick> = {};
         for (const pickDocument of snapshot.docs) {
@@ -196,37 +179,14 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
         }
         setDraftPicks(remotePicks);
 
-        const missingSavedPicks = attemptedMigration ? [] : Object.entries(savedStatus).filter(([playerId]) => !remoteStatus[Number(playerId)]);
-        attemptedMigration = true;
-        setStatus(missingSavedPicks.length ? { ...savedStatus, ...remoteStatus } : remoteStatus);
-        setLoaded(true);
-        setConnection("live");
+        // The live room is authoritative. Never restore picks from browser storage.
+        setStatus(remoteStatus);
+        setLoaded(!snapshot.metadata.fromCache);
+        setConnection(snapshot.metadata.fromCache ? "connecting" : "live");
         setError(null);
-
-        if (!missingSavedPicks.length) return;
-        try {
-          await runTransaction(db, async (transaction) => {
-            const refs = missingSavedPicks.map(([playerId]) => doc(db, "fantasyDrafts", DRAFT_ID, "picks", playerId));
-            const currentDocuments = await Promise.all(refs.map((reference) => transaction.get(reference)));
-            currentDocuments.forEach((currentDocument, index) => {
-              if (currentDocument.exists()) return;
-              const [, pickStatus] = missingSavedPicks[index];
-              transaction.set(refs[index], {
-                status: pickStatus,
-                actorName: pickStatus === "D" ? "Brian" : "Other team",
-                actorUid: user.uid,
-                updatedAt: serverTimestamp(),
-              });
-            });
-          });
-        } catch (migrationError) {
-          setStatus(remoteStatus);
-          setError(actionErrorMessage(migrationError, "The live board loaded, but older device-only picks could not be migrated."));
-        }
       },
       (syncError) => {
-        setStatus(savedStatus);
-        setLoaded(true);
+        setLoaded(false);
         setConnection("offline");
         setError(actionErrorMessage(syncError, "Unable to connect the private board to the shared draft room."));
       }
@@ -234,11 +194,6 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
 
     return unsubscribe;
   }, [authLoading, isAdmin, user]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(status));
-  }, [loaded, status]);
 
   useEffect(() => {
     if (!selectedPlayer) return;
@@ -278,20 +233,16 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
   );
 
   async function toggle(player: Player, next: DraftStatus) {
-    if (!user || !isAdmin) return;
+    if (!user || !isAdmin || !loaded || membership.status !== "active") return;
     const playerId = getFantasyPlayerId(player);
     setBusyPlayerId(playerId);
     try {
       const reference = doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId));
-      if (status[playerId] === next) {
+      if (next === "X" || status[playerId] === "D") {
+        // Undo only; no generic "taken by another team" writes are allowed.
         await deleteDoc(reference);
       } else {
-        await setDoc(reference, {
-          status: next,
-          actorName: next === "D" ? "Brian" : "Other team",
-          actorUid: user.uid,
-          updatedAt: serverTimestamp(),
-        });
+        await createFantasyRoomPick(playerId, "D");
       }
       setError(null);
     } catch (actionError) {
@@ -302,7 +253,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
   }
 
   async function resetDraft() {
-    if (!window.confirm("Reset every X and D on this draft board?")) return;
+    if (!window.confirm("Reset every team’s picks on this draft board?")) return;
     setResetting(true);
     try {
       const batch = writeBatch(db);
@@ -344,7 +295,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
         <div>
           <p className="draft-kicker">Updated Aug. 29 · 12 teams · Pick 1.01</p>
           <h1>Fantasy draft command center</h1>
-          <p>Tap <strong>X</strong> when someone else takes a player. Tap <strong>D</strong> for your pick. Every change updates the shared draft room automatically.</p>
+          <p>Tap <strong>Draft</strong> for your pick. Each participant drafts their own players in the shared room. Every pick belongs to a named team.</p>
           <div className={`draft-sync-status ${connection}`}>
             <i />{connection === "live" ? "Private and shared boards synced" : connection === "connecting" ? "Connecting to shared board" : "Shared-board connection interrupted"}
           </div>
@@ -443,8 +394,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
                   <td>{player[3]}</td>
                   <td className="draft-flag">{player[4]}</td>
                   <td><div className="draft-actions">
-                    <button type="button" className="draft-x" aria-label={`${player[1]} drafted by another team`} disabled={!loaded || busyPlayerId === getFantasyPlayerId(player)} onClick={() => toggle(player, "X")}>X</button>
-                    <button type="button" className="draft-d" aria-label={`Draft ${player[1]} to my team`} disabled={!loaded || busyPlayerId === getFantasyPlayerId(player)} onClick={() => toggle(player, "D")}>D</button>
+                    <button type="button" className="draft-d" aria-label={`Draft ${player[1]} to my team`} disabled={!loaded || membership.status !== "active" || busyPlayerId === getFantasyPlayerId(player)} onClick={() => toggle(player, "D")}>Draft</button>
                   </div></td>
                 </tr>
               ))}

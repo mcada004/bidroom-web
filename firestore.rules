@@ -17,21 +17,26 @@ service cloud.firestore {
         get(/databases/$(database)/documents/fantasyDrafts/$(draftId)/members/$(request.auth.uid)).data.status == "active";
     }
 
+    function isValidFantasyName(name) {
+      return name is string && name.size() >= 2 && name.size() <= 24 && name.matches('^\\S.*\\S$');
+    }
+
     function isValidSharedFantasyPick(allowMine) {
       return request.resource.data.keys().hasOnly([
           "status",
           "actorName",
           "actorUid",
-          "updatedAt"
+          "updatedAt",
+          "origin"
         ]) &&
         (
-          request.resource.data.status == "X" ||
+          (!allowMine && request.resource.data.status == "X") ||
           (allowMine && request.resource.data.status == "D")
         ) &&
-        request.resource.data.actorName is string &&
-        request.resource.data.actorName.size() >= 2 &&
-        request.resource.data.actorName.size() <= 24 &&
+        isValidFantasyName(request.resource.data.actorName) &&
         request.resource.data.actorUid == request.auth.uid &&
+        request.resource.data.origin == "named-room-v1" &&
+        request.resource.data.actorName == get(/databases/$(database)/documents/fantasyDrafts/brian-2026-live/members/$(request.auth.uid)).data.displayName &&
         request.resource.data.updatedAt == request.time;
     }
 
@@ -323,15 +328,13 @@ service cloud.firestore {
       allow create: if draftId == "brian-2026-live" && isSignedIn() &&
         request.auth.uid == memberUid &&
         request.resource.data.keys().hasOnly(["displayName", "status", "lastSeenAt"]) &&
-        request.resource.data.displayName is string &&
-        request.resource.data.displayName.size() >= 2 && request.resource.data.displayName.size() <= 24 &&
+        isValidFantasyName(request.resource.data.displayName) &&
         request.resource.data.status == "active" && request.resource.data.lastSeenAt == request.time;
       allow update: if draftId == "brian-2026-live" && (
         isFantasyDraftAdmin() || (
           isSignedIn() && request.auth.uid == memberUid && resource.data.status == "active" &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "lastSeenAt"]) &&
-          request.resource.data.displayName is string &&
-          request.resource.data.displayName.size() >= 2 && request.resource.data.displayName.size() <= 24 &&
+          isValidFantasyName(request.resource.data.displayName) &&
           request.resource.data.lastSeenAt == request.time
         )
       );
@@ -349,13 +352,12 @@ service cloud.firestore {
       // Brian's verified login can also add his own picks and correct/reset the board.
       allow create: if draftId == "brian-2026-live" &&
         pickId.matches('^[0-9]{1,3}$') &&
-        (isFantasyDraftAdmin() || isActiveFantasyMember(draftId)) &&
+        isActiveFantasyMember(draftId) &&
         isValidSharedFantasyPick(isFantasyDraftAdmin());
 
-      allow update: if draftId == "brian-2026-live" &&
-        pickId.matches('^[0-9]{1,3}$') &&
-        isFantasyDraftAdmin() &&
-        isValidSharedFantasyPick(true);
+      // Picks are immutable. Admin corrections must undo; only a named participant
+      // may then draft the available player. Old browser migrations lack origin.
+      allow update: if false;
 
       allow delete: if draftId == "brian-2026-live" && isFantasyDraftAdmin();
     }

@@ -11,9 +11,13 @@ const base = 'fantasyDrafts/brian-2026-live';
 const member = (db, id) => doc(db, base, 'members', id);
 const pick = (db, id) => doc(db, base, 'picks', id);
 const profile = (name) => ({ displayName: name, status: 'active', lastSeenAt: serverTimestamp() });
-const selection = (uid, status = 'X') => ({ actorUid: uid, actorName: 'Alex', status, updatedAt: serverTimestamp() });
+const selection = (uid, status = 'X') => ({ actorUid: uid, actorName: 'Alex', status, origin: 'named-room-v1', updatedAt: serverTimestamp() });
 try {
   await assertFails(getDocs(collection(publicDb, base, 'picks')));
+  await assertFails(setDoc(pick(publicDb, '1'), selection('guest')));
+  await assertFails(setDoc(member(guest, 'guest'), profile('  ')));
+  await assertFails(setDoc(pick(admin, '3'), selection('admin', 'D')));
+  await assertSucceeds(setDoc(member(admin, 'admin'), profile('Alex')));
   await assertFails(setDoc(pick(guest, '1'), selection('guest')));
   await assertSucceeds(setDoc(member(guest, 'guest'), profile('Alex')));
   await assertSucceeds(setDoc(member(other, 'other'), profile('Alex')));
@@ -22,7 +26,15 @@ try {
   await assertFails(getDoc(member(guest, 'other')));
   await assertSucceeds(getDocs(collection(admin, base, 'members')));
   await assertSucceeds(updateDoc(member(guest, 'guest'), { lastSeenAt: serverTimestamp() }));
+  const legacy = selection('guest'); delete legacy.origin;
+  await assertFails(setDoc(pick(guest, '1'), legacy));
+  const oldAdminMigration = selection('admin', 'D'); delete oldAdminMigration.origin;
+  await assertFails(setDoc(pick(admin, '1'), oldAdminMigration));
+  await assertFails(setDoc(pick(admin, '1'), { ...selection('admin'), actorName: 'Other team' }));
+  await assertFails(setDoc(pick(admin, '1'), selection('admin')));
+  await assertFails(setDoc(pick(guest, '1'), { ...selection('guest'), actorName: 'Someone else' }));
   await assertSucceeds(setDoc(pick(guest, '1'), selection('guest')));
+  await assertFails(setDoc(pick(admin, '1'), selection('admin', 'D')));
   await assertSucceeds(setDoc(pick(other, '2'), selection('other')));
   await assertFails(setDoc(pick(guest, '3'), selection('other')));
   await assertFails(setDoc(pick(guest, '3'), selection('guest', 'D')));
@@ -46,5 +58,5 @@ try {
   assert.equal((await getDoc(pick(admin, '2'))).exists(), true, 'reset preserves another team');
   assert.equal((await getDoc(pick(admin, '3'))).exists(), true, 'reset preserves admin roster');
   await assertSucceeds(setDoc(member(admin, 'legacy'), { displayName: 'Legacy', status: 'banned' }));
-  console.log('32 Firebase permission and moderation checks passed.');
+  console.log('Firebase permission, moderation, named ownership and stale-migration regression checks passed.');
 } finally { await environment.cleanup(); }

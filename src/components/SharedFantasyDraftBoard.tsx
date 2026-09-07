@@ -8,11 +8,10 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  serverTimestamp,
-  setDoc,
   writeBatch,
 } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
+import { createFantasyRoomPick } from "@/src/lib/createFantasyRoomPick";
 import { useFantasyRoomMembership } from "@/src/hooks/useFantasyRoomMembership";
 import { auth, db } from "@/src/lib/firebase";
 import FantasyPlayerSearch, { matchesPlayerName } from "@/src/components/FantasyPlayerSearch";
@@ -22,7 +21,6 @@ import { FANTASY_PLAYER_NOTES } from "@/src/lib/fantasyPlayerNotes";
 import {
   emptySharedDraftState,
   type SharedDraftPick,
-  type SharedDraftPickStatus,
   type SharedDraftState,
 } from "@/src/lib/sharedFantasyDraftState";
 import { getFantasyPlayerId, LastDraftedPlayerCard, PLAYERS, type Player } from "@/src/components/FantasyDraftBoard";
@@ -43,13 +41,13 @@ function normalizeUsername(value: string) {
 function actionErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code: unknown }).code);
-    if (code.includes("permission-denied")) return "That player was already taken, or your board permissions need refreshing.";
+    if (code.includes("permission-denied")) return "That player may already be taken. Refresh and join with your username before drafting.";
   }
   return error instanceof Error ? error.message : fallback;
 }
 
 export default function SharedFantasyDraftBoard() {
-  const { user, loading: authLoading, preferredDisplayName } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [draft, setDraft] = useState<SharedDraftState>(() => emptySharedDraftState());
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +66,7 @@ export default function SharedFantasyDraftBoard() {
   const isAdmin = Boolean(
     !authLoading && user && !user.isAnonymous && user.email?.toLowerCase() === ADMIN_EMAIL
   );
-  const activeName = isAdmin ? normalizeUsername(preferredDisplayName) ?? "Brian" : username;
+  const activeName = isAdmin ? "Brian" : username;
 
   const membership = useFantasyRoomMembership(activeName, authLoading);
 
@@ -191,25 +189,15 @@ export default function SharedFantasyDraftBoard() {
     }
   }
 
-  async function ensureFirebaseUser() {
-    return auth.currentUser ?? (await signInAnonymously(auth)).user;
-  }
-
-  async function markDrafted(player: Player, status: SharedDraftPickStatus) {
-    if (!activeName || (!isAdmin && membership.status !== "active")) {
+  async function markDrafted(player: Player) {
+    if (!activeName || membership.status !== "active") {
       setError("Enter your username before marking a player drafted.");
       return;
     }
     const playerId = getFantasyPlayerId(player);
     setBusyRank(playerId);
     try {
-      const currentUser = await ensureFirebaseUser();
-      await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)), {
-        status: isAdmin ? status : "X",
-        actorName: isAdmin && status === "X" ? "Other team" : activeName,
-        actorUid: currentUser.uid,
-        updatedAt: serverTimestamp(),
-      });
+      await createFantasyRoomPick(playerId, isAdmin ? "D" : "X");
       setError(null);
     } catch (actionError) {
       setError(actionErrorMessage(actionError, "Unable to mark that player."));
@@ -218,27 +206,16 @@ export default function SharedFantasyDraftBoard() {
     }
   }
 
-  async function editPick(player: Player, action: "set" | "undo", status?: SharedDraftPickStatus) {
+  async function undoPick(player: Player) {
+    if (!isAdmin) return;
     const playerId = getFantasyPlayerId(player);
     setBusyRank(playerId);
     try {
-      if (action === "undo") {
-        await deleteDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)));
-      } else {
-        const currentUser = await ensureFirebaseUser();
-        await setDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)), {
-          status,
-          actorName: status === "X" ? "Other team" : activeName,
-          actorUid: currentUser.uid,
-          updatedAt: serverTimestamp(),
-        });
-      }
+      await deleteDoc(doc(db, "fantasyDrafts", DRAFT_ID, "picks", String(playerId)));
       setError(null);
     } catch (actionError) {
-      setError(actionErrorMessage(actionError, "Unable to edit that pick."));
-    } finally {
-      setBusyRank(null);
-    }
+      setError(actionErrorMessage(actionError, "Unable to undo that pick."));
+    } finally { setBusyRank(null); }
   }
 
   async function resetBoard() {
@@ -353,8 +330,7 @@ export default function SharedFantasyDraftBoard() {
               </button>
               {isAdmin ? (
                 <div className="shared-roster-admin">
-                  <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "set", "X")}>Other</button>
-                  <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "undo")}>×</button>
+                  <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => undoPick(player)}>×</button>
                 </div>
               ) : null}
             </article>
@@ -366,7 +342,7 @@ export default function SharedFantasyDraftBoard() {
         <div className="draft-section-heading">
           <div>
             <h2 id="shared-board-title">Best available</h2>
-            <span>{isAdmin ? "Mine adds to your roster · Taken removes for everyone" : "Click a name for Brian’s draft notes"}</span>
+            <span>{isAdmin ? "Draft adds to your roster · each participant drafts their own team" : "Click a name for Brian’s draft notes"}</span>
           </div>
           <label className="draft-position-filter">
             <span>Filter position</span>
@@ -391,32 +367,10 @@ export default function SharedFantasyDraftBoard() {
                   <td className="draft-flag">{player[4]}</td>
                   <td>
                     <div className="draft-actions">
-                      {isAdmin ? (
-                        <>
-                          <button
-                            type="button"
-                            className="draft-d shared-mine-button"
-                            aria-label={`Add ${player[1]} to Brian's team`}
-                            disabled={busyRank === getFantasyPlayerId(player)}
-                            onClick={() => markDrafted(player, "D")}
-                          >Mine</button>
-                          <button
-                            type="button"
-                            className="draft-x shared-taken-button"
-                            aria-label={`Mark ${player[1]} drafted by another team`}
-                            disabled={busyRank === getFantasyPlayerId(player)}
-                            onClick={() => markDrafted(player, "X")}
-                          >Taken</button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="draft-d shared-mine-button"
-                          aria-label={`Draft ${player[1]} to ${activeName ?? "your"} team`}
-                          disabled={!activeName || membership.status !== "active" || busyRank === getFantasyPlayerId(player)}
-                          onClick={() => markDrafted(player, "X")}
-                        >Draft</button>
-                      )}
+                      <button type="button" className="draft-d shared-mine-button"
+                        aria-label={`Draft ${player[1]} to ${activeName || "your"} team`}
+                        disabled={!activeName || membership.status !== "active" || busyRank === getFantasyPlayerId(player)}
+                        onClick={() => markDrafted(player)}>Draft</button>
                     </div>
                   </td>
                 </tr>
@@ -439,8 +393,7 @@ export default function SharedFantasyDraftBoard() {
                 </button>
                 {isAdmin ? (
                   <div className="shared-away-admin">
-                    <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "set", "D")}>Mine</button>
-                    <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => editPick(player, "undo")}>Undo</button>
+                    <button type="button" disabled={busyRank === getFantasyPlayerId(player)} onClick={() => undoPick(player)}>Undo</button>
                   </div>
                 ) : null}
               </article>

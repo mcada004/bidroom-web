@@ -11,7 +11,7 @@ export function buildRoomTeams(members: RoomMember[], picks: RoomPick[], adminUi
     const isAdminPick = pick.status === "D";
     const unassigned = pick.status === "X" && (!pick.actorUid || pick.actorUid === adminUid);
     const key = isAdminPick ? adminUid : unassigned ? "unassigned" : pick.actorUid!;
-    if (!teams.has(key)) teams.set(key, { key, uid: unassigned ? null : key, name: isAdminPick ? "Brian" : unassigned ? "Other teams · unassigned picks" : pick.actorName, status: "legacy", lastSeenAt: 0, picks: [], isAdmin: isAdminPick });
+    if (!teams.has(key)) teams.set(key, { key, uid: unassigned ? null : key, name: isAdminPick ? "Brian" : unassigned ? "Legacy picks needing correction" : pick.actorName, status: "legacy", lastSeenAt: 0, picks: [], isAdmin: isAdminPick });
     teams.get(key)!.picks.push(pick);
   }
   return [...teams.values()].sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
