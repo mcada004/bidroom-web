@@ -34,3 +34,9 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Draft room permission tests
+
+With dependencies installed, Firebase CLI and Java 21+ available, run `npm run test:rules`.
+This uses the local Firestore emulator with the `demo-fantasy-room` project, never production data.
+The checks cover private participant lists, team isolation, admin resets, removals, and restored access.

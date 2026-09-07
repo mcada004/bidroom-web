@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"src/**/*.test.mts\""
+    "test": "node --test \"src/**/*.test.mts\"",
+    "test:rules": "firebase emulators:exec --project demo-fantasy-room --config firebase.rules-test.json --only firestore \"node scripts/test-fantasy-room-rules.mjs\""
   },
   "dependencies": {
     "firebase": "^12.8.0",
@@ -17,6 +18,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

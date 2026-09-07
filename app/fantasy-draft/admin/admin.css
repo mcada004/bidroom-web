@@ -1,0 +1,22 @@
+.room-admin-heading, .room-admin-team-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.room-admin-heading h1 { font: 600 clamp(28px, 4vw, 40px)/1.1 "Iowan Old Style", Palatino, serif; margin: 6px 0 12px; }
+.room-admin-eyebrow { letter-spacing: .12em; font-size: 11px; color: #17622d; font-weight: 800; }
+.room-admin-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.room-admin-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 20px; margin-top: 24px; }
+.room-admin-team { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: white; }
+.room-admin-team h2 { font-size: 20px; margin: 0; overflow-wrap: anywhere; }
+.room-admin-team h2 small { font-size: 11px; color: #17622d; }
+.room-admin-team-heading p, .room-admin-team-heading small { color: var(--muted); font-size: 12px; }
+.room-admin-team-heading > strong { flex-shrink: 0; font-size: 13px; }
+.room-admin-roster { list-style: none; padding: 0; margin: 20px 0; }
+.room-admin-roster li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.room-admin-roster li > strong { flex: 1; }
+.room-admin-roster li > span:last-child { color: var(--muted); }
+.room-admin-empty { color: var(--muted); padding: 20px 0; }
+.room-admin-danger { background: #9f2929 !important; color: white !important; }
+.room-admin-confirm { margin-top: 16px; padding: 14px; background: #fff1ed; border: 1px solid #e6b6a9; border-radius: 10px; font-size: 13px; line-height: 1.6; }
+.room-admin-error, .room-admin-notice { padding: 14px; border-radius: 10px; }
+.room-admin-error { background: #fff1ed; color: #9f2929; }
+.room-admin-notice { background: #e8f5eb; color: #17622d; }
+.room-admin-footnote { color: var(--muted); font-size: 12px; line-height: 1.7; margin-top: 24px; }
+@media (max-width: 640px) { .room-admin-heading { flex-direction: column; } .room-admin-team { padding: 16px; } }

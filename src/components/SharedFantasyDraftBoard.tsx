@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
+import { useFantasyRoomMembership } from "@/src/hooks/useFantasyRoomMembership";
 import { auth, db } from "@/src/lib/firebase";
 import FantasyPlayerSearch, { matchesPlayerName } from "@/src/components/FantasyPlayerSearch";
 import { FantasyConductFilter, FantasyConductNotes } from "@/src/components/FantasyConductFilter";
@@ -69,6 +70,8 @@ export default function SharedFantasyDraftBoard() {
   );
   const activeName = isAdmin ? normalizeUsername(preferredDisplayName) ?? "Brian" : username;
 
+  const membership = useFantasyRoomMembership(activeName, authLoading);
+
   useEffect(() => {
     const stored = normalizeUsername(window.localStorage.getItem(USERNAME_KEY) ?? "");
     if (stored) {
@@ -78,6 +81,7 @@ export default function SharedFantasyDraftBoard() {
   }, []);
 
   useEffect(() => {
+    if (!isAdmin && membership.status !== "active") return;
     setConnection("connecting");
     const unsubscribe = onSnapshot(
       collection(db, "fantasyDrafts", DRAFT_ID, "picks"),
@@ -118,7 +122,7 @@ export default function SharedFantasyDraftBoard() {
     );
 
     return unsubscribe;
-  }, []);
+  }, [isAdmin, membership.status]);
 
   useEffect(() => {
     if (!selectedPlayer) return;
@@ -135,14 +139,10 @@ export default function SharedFantasyDraftBoard() {
   );
   const guestTeam = useMemo(() => {
     if (isAdmin || !activeName) return [];
-    const normalizedActiveName = activeName.toLocaleLowerCase();
 
     return PLAYERS.filter((player) => {
       const pick = draft.picks[String(getFantasyPlayerId(player))];
-      return pick?.status === "X" && (
-        (Boolean(user) && pick.actorUid === user?.uid) ||
-        pick.actorName.toLocaleLowerCase() === normalizedActiveName
-      );
+      return pick?.status === "X" && Boolean(user) && pick.actorUid === user?.uid;
     });
   }, [activeName, draft.picks, isAdmin, user]);
   const team = isAdmin ? brianTeam : guestTeam;
@@ -196,7 +196,7 @@ export default function SharedFantasyDraftBoard() {
   }
 
   async function markDrafted(player: Player, status: SharedDraftPickStatus) {
-    if (!activeName) {
+    if (!activeName || (!isAdmin && membership.status !== "active")) {
       setError("Enter your username before marking a player drafted.");
       return;
     }
@@ -279,6 +279,8 @@ export default function SharedFantasyDraftBoard() {
     }
   }
 
+  if (!isAdmin && membership.status === "banned") return <main className="draft-page"><section className="draft-access-card"><h1>You’ve been removed from this draft room</h1><p>Contact Brian if you’d like to rejoin. Your previous picks remain recorded.</p></section></main>;
+
   return (
     <main className="draft-page shared-draft-page">
       <section className="shared-draft-hero">
@@ -292,7 +294,7 @@ export default function SharedFantasyDraftBoard() {
         </div>
         <div className="shared-hero-actions">
           <button className="button secondary" type="button" onClick={shareBoard}>{shareLabel}</button>
-          {isAdmin ? <Link className="button secondary" href="/fantasy-draft">Private board</Link> : null}
+          {isAdmin ? <><Link className="button secondary" href="/fantasy-draft">Private board</Link><Link className="button secondary" href="/fantasy-draft/admin">Room dashboard</Link></> : null}
           {isAdmin ? (
             <button className="button ghost" type="button" disabled={resetting} onClick={resetBoard}>{resetting ? "Resetting…" : "Reset board"}</button>
           ) : (
@@ -326,6 +328,8 @@ export default function SharedFantasyDraftBoard() {
         </section>
       )}
 
+      {membership.error ? <div className="shared-draft-error" role="alert">{membership.error}</div> : null}
+      {activeName && !isAdmin && membership.status === "joining" ? <p role="status">Joining draft room…</p> : null}
       {error ? <div className="shared-draft-error" role="alert">{error}</div> : null}
 
       <section className="draft-stats" aria-live="polite">
@@ -409,7 +413,7 @@ export default function SharedFantasyDraftBoard() {
                           type="button"
                           className="draft-d shared-mine-button"
                           aria-label={`Draft ${player[1]} to ${activeName ?? "your"} team`}
-                          disabled={!activeName || busyRank === getFantasyPlayerId(player)}
+                          disabled={!activeName || membership.status !== "active" || busyRank === getFantasyPlayerId(player)}
                           onClick={() => markDrafted(player, "X")}
                         >Draft</button>
                       )}

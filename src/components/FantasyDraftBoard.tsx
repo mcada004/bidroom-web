@@ -351,6 +351,7 @@ export default function FantasyDraftBoard({ rosterOnly = false }: { rosterOnly?:
         </div>
         <div className="draft-hero-actions">
           <Link className="button secondary" href="/fantasy-draft/shared">Shared Board</Link>
+          <Link className="button secondary" href="/fantasy-draft/admin">Room Dashboard</Link>
           <Link className="button" href="/fantasy-team">View My Team</Link>
           <button className="button ghost" type="button" disabled={!loaded || resetting} onClick={resetDraft}>{resetting ? "Resetting…" : "Reset board"}</button>
         </div>

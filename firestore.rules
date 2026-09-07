@@ -8,8 +8,13 @@ service cloud.firestore {
 
     function isFantasyDraftAdmin() {
       return isSignedIn() &&
-        request.auth.token.email is string &&
-        request.auth.token.email == "mcada004@gmail.com";
+        request.auth.token.get("email", "") == "mcada004@gmail.com";
+    }
+
+    function isActiveFantasyMember(draftId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/fantasyDrafts/$(draftId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/fantasyDrafts/$(draftId)/members/$(request.auth.uid)).data.status == "active";
     }
 
     function isValidSharedFantasyPick(allowMine) {
@@ -311,15 +316,40 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /fantasyDrafts/{draftId}/members/{memberUid} {
+      allow get: if draftId == "brian-2026-live" && isSignedIn() &&
+        (isFantasyDraftAdmin() || request.auth.uid == memberUid);
+      allow list: if draftId == "brian-2026-live" && isFantasyDraftAdmin();
+      allow create: if draftId == "brian-2026-live" && isSignedIn() &&
+        request.auth.uid == memberUid &&
+        request.resource.data.keys().hasOnly(["displayName", "status", "lastSeenAt"]) &&
+        request.resource.data.displayName is string &&
+        request.resource.data.displayName.size() >= 2 && request.resource.data.displayName.size() <= 24 &&
+        request.resource.data.status == "active" && request.resource.data.lastSeenAt == request.time;
+      allow update: if draftId == "brian-2026-live" && (
+        isFantasyDraftAdmin() || (
+          isSignedIn() && request.auth.uid == memberUid && resource.data.status == "active" &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["displayName", "lastSeenAt"]) &&
+          request.resource.data.displayName is string &&
+          request.resource.data.displayName.size() >= 2 && request.resource.data.displayName.size() <= 24 &&
+          request.resource.data.lastSeenAt == request.time
+        )
+      );
+      // Admin may ban a legacy participant who has picks but no membership yet.
+      allow create: if draftId == "brian-2026-live" && isFantasyDraftAdmin();
+      // Membership cannot be deleted to evade removal.
+      allow delete: if false;
+    }
+
     match /fantasyDrafts/{draftId}/picks/{pickId} {
-      // Anyone with the shared link can watch the draft without an account.
-      allow read: if draftId == "brian-2026-live";
+      // Only room members and Brian may read live picks. Removed members lose access.
+      allow read: if draftId == "brian-2026-live" && (isFantasyDraftAdmin() || isActiveFantasyMember(draftId));
 
       // Username-only guests sign in anonymously and can mark an available player taken.
       // Brian's verified login can also add his own picks and correct/reset the board.
       allow create: if draftId == "brian-2026-live" &&
         pickId.matches('^[0-9]{1,3}$') &&
-        isSignedIn() &&
+        (isFantasyDraftAdmin() || isActiveFantasyMember(draftId)) &&
         isValidSharedFantasyPick(isFantasyDraftAdmin());
 
       allow update: if draftId == "brian-2026-live" &&
