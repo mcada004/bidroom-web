@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { useAuth } from "@/src/context/AuthContext";
 import { auth } from "@/src/lib/firebase";
+import { TRAINING_OWNER_EMAIL } from "@/src/lib/training";
 
 export default function Header() {
   const router = useRouter();
@@ -37,6 +38,9 @@ export default function Header() {
           </Link>
           {!loading && user ? (
             <>
+              {user.email?.toLowerCase() === TRAINING_OWNER_EMAIL && (
+                <Link className="pill" href="/training">Training</Link>
+              )}
               <Link className="pill" href="/my-trips">
                 My Trips
               </Link>

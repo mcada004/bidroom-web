@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Private training inputs are never source assets.
+*training*snapshot.plain.json
+*Training_Record.md
+training-seed*.json
+*private-key*
