@@ -1,0 +1,182 @@
+[
+  {
+    "id": "alexis-levine",
+    "slug": "alexis-levine",
+    "name": "Alexis Levine",
+    "age": 34,
+    "location": "Atlanta, GA",
+    "occupation": "Criminal defense attorney",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwMzgz/alexis-levine.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "an-thien-an-nguyen",
+    "slug": "an-thien-an-nguyen",
+    "name": "An “Thien An” Nguyen",
+    "age": 24,
+    "location": "Fort Worth, TX",
+    "occupation": "Medical student",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDUy/an-thien-an-nguyen.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "ana-sani",
+    "slug": "ana-sani",
+    "name": "Ana Sani",
+    "age": 34,
+    "location": "Toronto, ON",
+    "occupation": "Voice actress",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwMzg4/ana-sani.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "angelica-jelly-loblack",
+    "slug": "angelica-jelly-loblack",
+    "name": "Angelica “Jelly” Loblack",
+    "age": 29,
+    "location": "Bloomington, IN",
+    "occupation": "Sociology professor",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwMzkz/angelica-jelly-loblack.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "brady-booker",
+    "slug": "brady-booker",
+    "name": "Brady Booker",
+    "age": 27,
+    "location": "Knoxville, TN",
+    "occupation": "Pro wrestler",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwMzk3/brady-booker.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "carter-krull",
+    "slug": "carter-krull",
+    "name": "Carter Krull",
+    "age": 24,
+    "location": "Sioux Falls, SD",
+    "occupation": "Livestock farmer",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDAw/carter-krull.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "cristian-chavez",
+    "slug": "cristian-chavez",
+    "name": "Cristian Chavez",
+    "age": 26,
+    "location": "Salt Lake City, UT",
+    "occupation": "HR head",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDA0/cristian-chavez.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "danny-kilby-kilby",
+    "slug": "danny-kilby-kilby",
+    "name": "Danny “Kilby” Kilby",
+    "age": 30,
+    "location": "London, ON",
+    "occupation": "Game designer",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDA2/danny-kilby.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "devin-way",
+    "slug": "devin-way",
+    "name": "Devin Way",
+    "age": 33,
+    "location": "Los Angeles, CA",
+    "occupation": "Actor",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDEy/devin-way.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "eric-macksoud",
+    "slug": "eric-macksoud",
+    "name": "Eric Macksoud",
+    "age": 34,
+    "location": "Windsor Locks, CT",
+    "occupation": "Mental health counselor",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDE3/erick-macksoud.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "jenna-doore",
+    "slug": "jenna-doore",
+    "name": "Jenna Doore",
+    "age": 30,
+    "location": "Toledo, OH",
+    "occupation": "Wedding photographer",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDIx/survivor.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "kristin-flickinger",
+    "slug": "kristin-flickinger",
+    "name": "Kristin Flickinger",
+    "age": 49,
+    "location": "Santa Barbara, CA",
+    "occupation": "Crisis management",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDIz/kristin-flickinger.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "lewis-kelly",
+    "slug": "lewis-kelly",
+    "name": "Lewis Kelly",
+    "age": 28,
+    "location": "Puerto Rico",
+    "occupation": "Farmer",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDI1/lewis-kelly.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "linnea-capobianco",
+    "slug": "linnea-capobianco",
+    "name": "Linnea Capobianco",
+    "age": 25,
+    "location": "Jersey City, NJ",
+    "occupation": "Entrepreneur",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDI5/linnea-capobianco.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "maggie-nestor",
+    "slug": "maggie-nestor",
+    "name": "Maggie Nestor",
+    "age": 40,
+    "location": "Charlestown, WV",
+    "occupation": "Farmer",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDMy/maggie-nestor.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "mike-pinsky",
+    "slug": "mike-pinsky",
+    "name": "Mike Pinsky",
+    "age": 32,
+    "location": "New York City, NY",
+    "occupation": "Baseball executive",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDM2/mike-pinsky.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "ori-jean-charles",
+    "slug": "ori-jean-charles",
+    "name": "Ori Jean-Charles",
+    "age": 27,
+    "location": "Spring Valley, NY",
+    "occupation": "Personal trainer",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDQx/ori-jean-charles.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "patt-cannaday",
+    "slug": "patt-cannaday",
+    "name": "Patt Cannaday",
+    "age": 33,
+    "location": "Washington, D.C.",
+    "occupation": "Federal prosecutor",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDQ1/patt-cannaday-on-survivor-51.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "rob-antonson",
+    "slug": "rob-antonson",
+    "name": "Rob Antonson",
+    "age": 40,
+    "location": "Cumberland, RI",
+    "occupation": "Airline gate agent",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDQ3/rob-antonson.jpg?profile=w2560&x=50&y=50"
+  },
+  {
+    "id": "sharonda-cox",
+    "slug": "sharonda-cox",
+    "name": "Sharonda Cox",
+    "age": 34,
+    "location": "Richmond, KY",
+    "occupation": "OBGYN resident",
+    "image": "https://parade.com/.image/ODowMDAwMDAwMDAyMzMwNDQ5/sharonda-cox.jpg?profile=w2560&x=50&y=50"
+  }
+]

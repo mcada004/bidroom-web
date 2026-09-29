@@ -36,6 +36,7 @@ export default function Header() {
           <Link className="pill" href="/fantasy-draft">
             Draft Board
           </Link>
+          <Link className="pill" href="/survivor">Survivor 51</Link>
           {!loading && user ? (
             <>
               {user.email?.toLowerCase() === TRAINING_OWNER_EMAIL && (

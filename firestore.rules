@@ -361,5 +361,50 @@ service cloud.firestore {
 
       allow delete: if draftId == "brian-2026-live" && isFantasyDraftAdmin();
     }
+
+    // Survivor has its own public room. Existing feature permissions are unchanged.
+    match /survivorDrafts/{draftId} {
+      function validShape(d) {
+        return d.keys().hasAll(["uids", "names", "nameKeys", "picks"]) &&
+          d.keys().hasOnly(["uids", "names", "nameKeys", "picks"]) &&
+          d.uids is list && d.names is list && d.nameKeys is list && d.picks is list &&
+          d.uids.size() >= 1 && d.uids.size() <= 5 &&
+          d.names.size() == d.uids.size() && d.nameKeys.size() == d.uids.size() &&
+          d.uids.toSet().size() == d.uids.size() && d.nameKeys.toSet().size() == d.nameKeys.size() &&
+          d.picks.size() <= 20 && d.picks.toSet().size() == d.picks.size() &&
+          d.picks.hasOnly(["alexis-levine", "an-thien-an-nguyen", "ana-sani", "angelica-jelly-loblack", "brady-booker", "carter-krull", "cristian-chavez", "danny-kilby-kilby", "devin-way", "eric-macksoud", "jenna-doore", "kristin-flickinger", "lewis-kelly", "linnea-capobianco", "maggie-nestor", "mike-pinsky", "ori-jean-charles", "patt-cannaday", "rob-antonson", "sharonda-cox"]);
+      }
+      function validTeam(d, index) {
+        return d.uids[index] == request.auth.uid &&
+          isValidFantasyName(d.names[index]) &&
+          d.nameKeys[index] == d.names[index].lower();
+      }
+      function joinOnly(before, after) {
+        let n = before.uids.size();
+        return n < 5 && before.picks.size() == 0 &&
+          after.uids.size() == n + 1 && validTeam(after, n) &&
+          after.uids == before.uids.concat([request.auth.uid]) &&
+          after.names == before.names.concat([after.names[n]]) &&
+          after.nameKeys == before.nameKeys.concat([after.nameKeys[n]]) &&
+          after.picks == before.picks;
+      }
+      function pickOnly(before, after) {
+        let n = before.picks.size();
+        let team = n < 5 ? n : n < 10 ? 9 - n : n < 15 ? n - 10 : 19 - n;
+        return before.uids.size() == 5 && n < 20 &&
+          before.uids[team] == request.auth.uid &&
+          after.diff(before).affectedKeys().hasOnly(["picks"]) &&
+          after.picks.size() == n + 1 &&
+          after.picks == before.picks.concat([after.picks[n]]);
+      }
+      allow get: if draftId == "survivor-51-2026";
+      allow list, delete: if false;
+      allow create: if draftId == "survivor-51-2026" && isSignedIn() &&
+        validShape(request.resource.data) && request.resource.data.uids.size() == 1 &&
+        validTeam(request.resource.data, 0) && request.resource.data.picks.size() == 0;
+      allow update: if draftId == "survivor-51-2026" && isSignedIn() &&
+        validShape(request.resource.data) &&
+        (joinOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
+    }
   }
 }
