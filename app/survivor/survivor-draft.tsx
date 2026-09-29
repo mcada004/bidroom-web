@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { signInAnonymously } from 'firebase/auth';
-import { doc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
 import Link from 'next/link';
 import { auth, db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/context/AuthContext';
@@ -19,7 +19,9 @@ export default function SurvivorDraft() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [selection, setSelection] = useState<{ id: string; pick: number } | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
+  const resetDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     return onSnapshot(doc(db, 'survivorDrafts', SURVIVOR_ROOM), { includeMetadataChanges: true }, (snapshot) => {
       setState(snapshot.exists() ? snapshot.data() as DraftState : emptyDraft());
@@ -27,6 +29,7 @@ export default function SurvivorDraft() {
     }, () => { setConnected(false); setReady(true); setError('Could not connect to the shared draft. Please retry.'); });
   }, [retry]);
   useEffect(() => { if (selection) dialog.current?.showModal(); else dialog.current?.close(); }, [selection]);
+  useEffect(() => { if (confirmReset) resetDialog.current?.showModal(); else resetDialog.current?.close(); }, [confirmReset]);
   const organizer = user?.email?.toLowerCase() === 'mcada004@gmail.com';
   const myTeam = user ? state.order.indexOf(user.uid) : -1;
   const finished = state.picks.length === 20;
@@ -100,6 +103,16 @@ export default function SurvivorDraft() {
     try { if (navigator.share) await navigator.share({ title: 'Survivor 51 Draft', url }); else { await navigator.clipboard.writeText(url); setNotice('Draft link copied. Send it to your group.'); } }
     catch (e) { if (!(e instanceof Error && e.name === 'AbortError')) setNotice(`Share this link: ${url}`); }
   }
+  async function resetDraft() {
+    if (!organizer || !connected) return;
+    setBusy(true); setError('');
+    try {
+      await deleteDoc(doc(db, 'survivorDrafts', SURVIVOR_ROOM));
+      setConfirmReset(false);
+      setNotice('Draft reset. Teams can join again.');
+    } catch { setError('Unable to reset the draft. Check your connection and try again.'); }
+    finally { setBusy(false); }
+  }
   const chosen = cast.find(c => c.id === selection?.id);
   return <main className="sv-page">
     <header className="sv-heading"><div><p className="sv-eyebrow">BIDROOM / FANTASY DRAFT</p><h1>SURVIVOR <span>51</span></h1><p className="sv-subtitle">5 teams <span>·</span> 20 castaways <span>·</span> 4 rounds</p></div><button className="sv-secondary" onClick={share}>Share draft</button></header>
@@ -114,6 +127,7 @@ export default function SurvivorDraft() {
     {myTeam < 0 && state.uids.length < 5 && <form className="sv-join" onSubmit={join}><div><label htmlFor="sv-team">Your team name</label><p>No account needed. Your team stays linked to this browser. {!organizer && <><Link href="/login">Organizer? Sign in before joining.</Link></>}</p></div><input id="sv-team" required minLength={2} maxLength={24} value={name} onChange={e => setName(e.target.value)} placeholder="Name your tribe" autoComplete="off" /><button className="sv-primary" disabled={busy || loading || !connected}>{busy ? 'Joining…' : 'Join draft'}</button></form>}
     {myTeam < 0 && state.uids.length === 5 && <p className="sv-notice">All five spots are filled. You’re watching the draft. To pick for an existing team, return in the browser you joined with.</p>}
     {!state.started && state.uids.length > 0 && <section className="sv-order" aria-labelledby="sv-order-heading"><div><h2 id="sv-order-heading">Draft order</h2><p>Round one follows the numbered slots. Later rounds reverse direction.</p></div>{organizer ? <><ol>{state.order.map((uid, i) => <li key={uid}><strong>{i + 1}. {teamName(i)}</strong><div><button type="button" className="sv-secondary" aria-label={`Move ${teamName(i)} up`} disabled={busy || !connected || i === 0} onClick={() => setOrder(i, i - 1)}>Up</button><button type="button" className="sv-secondary" aria-label={`Move ${teamName(i)} down`} disabled={busy || !connected || i === state.order.length - 1} onClick={() => setOrder(i, i + 1)}>Down</button></div></li>)}</ol><button className="sv-primary" disabled={busy || !connected || state.uids.length !== 5} onClick={beginDraft}>{busy ? 'Saving…' : 'Start draft'}</button><p className="sv-order-hint">Starting the draft locks this order.</p></> : <p className="sv-order-hint">{loading ? 'Checking organizer access…' : <>Brian can set the order and start the draft. <Link href="/login">Organizer sign in</Link></>}</p>}</section>}
+    {organizer && state.uids.length > 0 && <div className="sv-reset"><button type="button" className="sv-reset-button" disabled={busy || !connected} onClick={() => setConfirmReset(true)}>Reset draft</button><p>Clears every team and pick so everyone can start over.</p></div>}
     <section className="sv-teams" aria-label="Teams and rosters">{Array.from({ length: 5 }, (_, i) => <div key={i} className={`sv-team ${live && currentTeam === i ? 'sv-active' : ''}`} style={{ '--team-color': colors[i] } as React.CSSProperties}><div className="sv-team-title"><span className="sv-team-number">{i + 1}</span><h3>{teamName(i)} {myTeam === i && <small>YOU</small>}</h3><span>{state.picks.filter((_, p) => teamForPick(p) === i).length}/4</span></div><ul>{state.picks.map((id, p) => teamForPick(p) === i ? <li key={id}><span>#{p + 1}</span>{cast.find(c => c.id === id)?.name}</li> : null)}{!state.picks.some((_, p) => teamForPick(p) === i) && <li className="sv-empty">{state.order[i] ? 'Waiting for first pick' : 'Waiting for a team'}</li>}</ul></div>)}</section>
     <div className="sv-board-title"><h2>The castaways</h2><span>{20 - state.picks.length} available</span></div>
     <div className="sv-grid">{cast.map(c => {
@@ -122,5 +136,6 @@ export default function SurvivorDraft() {
     })}</div>
     <footer className="sv-footer"><p>Snake order: 1–5, 5–1, 1–5, 5–1. Four castaways per team.</p><p>Cast as of September 29, 2026. Aaliyah Puglia is excluded after elimination. Bios: <a href="https://parade.com/tv/survivor-51-cast-2026" target="_blank" rel="noreferrer">Parade</a>. Photos: Robert Voets / CBS. Unofficial fan draft.</p></footer>
     <dialog className="sv-dialog" ref={dialog} onCancel={e => { if (busy) e.preventDefault(); else setSelection(null); }} onClose={() => setSelection(null)} aria-labelledby="sv-confirm-title"><h2 id="sv-confirm-title">Draft {chosen?.name}?</h2><p>This locks in pick #{(selection?.pick ?? 0) + 1} for {teamName(myTeam)}. Picks are final.</p><div><button className="sv-secondary" disabled={busy} onClick={() => setSelection(null)}>Cancel</button><button className="sv-primary" disabled={busy || !connected || !myTurn} onClick={draft}>{busy ? 'Saving pick…' : 'Confirm pick'}</button></div></dialog>
+    <dialog className="sv-dialog" ref={resetDialog} onCancel={e => { if (busy) e.preventDefault(); else setConfirmReset(false); }} onClose={() => setConfirmReset(false)} aria-labelledby="sv-reset-title"><h2 id="sv-reset-title">Reset the entire draft?</h2><p>This will remove every team, all picks, and the draft order for everyone. The five teams will need to join again. This cannot be undone.</p><div><button type="button" className="sv-secondary" disabled={busy} onClick={() => setConfirmReset(false)}>Cancel</button><button type="button" className="sv-reset-confirm" disabled={busy || !connected || !organizer} onClick={resetDraft}>{busy ? 'Resetting…' : 'Reset everything'}</button></div></dialog>
   </main>;
 }
