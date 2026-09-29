@@ -54,5 +54,9 @@ try {
  await assertFails(setDoc(ref(clients[0]),{...s,picks:s.picks.slice(0,-1)}));
  await assertFails(deleteDoc(ref(clients[0])));
  await assertFails(setDoc(doc(clients[0],'survivorDrafts','unapproved-room'),s));
- console.log('PASS: guest access, organizer-only order and start, five teams, snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
+ await assertFails(deleteDoc(ref(publicDb)));
+ await assertSucceeds(deleteDoc(ref(organizer)));
+ assert.equal((await getDoc(ref(publicDb))).exists(),false);
+ await assertSucceeds(setDoc(ref(clients[1]),{uids:['u1'],names:['Fresh Team'],nameKeys:['fresh team'],order:['u1'],started:false,picks:[]}));
+ console.log('PASS: guest access, organizer-only order, start and reset, five teams, snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
 } finally {await env.cleanup();}

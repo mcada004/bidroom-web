@@ -407,7 +407,8 @@ service cloud.firestore {
           after.picks == before.picks.concat([after.picks[n]]);
       }
       allow get: if draftId == "survivor-51-2026";
-      allow list, delete: if false;
+      allow list: if false;
+      allow delete: if draftId == "survivor-51-2026" && isFantasyDraftAdmin();
       allow create: if draftId == "survivor-51-2026" && isSignedIn() &&
         validShape(request.resource.data) && request.resource.data.uids.size() == 1 &&
         request.resource.data.order == [request.auth.uid] && request.resource.data.started == false &&
