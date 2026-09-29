@@ -2,9 +2,9 @@
 
 Public route: `/survivor`. Isolated Firestore document: `survivorDrafts/survivor-51-2026`.
 
-Five teams join using a name; existing Firebase anonymous authentication persists ownership in the browser. Users must return using the same browser. Join order is draft order. Once five teams join, the four-round snake draft begins automatically. Shared state uses Firestore transactions and live snapshots, never localStorage.
+Five teams join using a name; existing Firebase anonymous authentication persists ownership in the browser. Users must return using the same browser. Brian signs into Bidroom with his verified mcada004@gmail.com account to move joined teams up/down and start when all five have joined. This locks the order. Shared state uses Firestore transactions and live snapshots, never localStorage.
 
-Rules enforce five unique names and owners, valid contestants, turn order, unique picks and append-only history. The public may read this room but cannot list rooms. Only the current team may append a pick. Confirmations record the expected pick number to reject stale submissions even on consecutive turns. No reset, reassignment or undo is exposed.
+Rules enforce five unique names and owners, verified organizer-only order changes/start, valid contestants, turn order, unique picks and append-only history. The public may read this room but cannot list rooms. Only the current team may append a pick. Confirmations record the expected pick number to reject stale submissions even on consecutive turns. No reset, reassignment or undo is exposed.
 
 Cast facts and photos checked September 29, 2026 against https://parade.com/tv/survivor-51-cast-2026. Aaliyah Puglia is excluded. Photos: Robert Voets/CBS, served by Parade. This is a fixed draft snapshot, not an automatic elimination feed.
 
