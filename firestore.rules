@@ -365,12 +365,13 @@ service cloud.firestore {
     // Survivor has its own public room. Existing feature permissions are unchanged.
     match /survivorDrafts/{draftId} {
       function validShape(d) {
-        return d.keys().hasAll(["uids", "names", "nameKeys", "picks"]) &&
-          d.keys().hasOnly(["uids", "names", "nameKeys", "picks"]) &&
-          d.uids is list && d.names is list && d.nameKeys is list && d.picks is list &&
+        return d.keys().hasAll(["uids", "names", "nameKeys", "order", "started", "picks"]) &&
+          d.keys().hasOnly(["uids", "names", "nameKeys", "order", "started", "picks"]) &&
+          d.uids is list && d.names is list && d.nameKeys is list && d.order is list && d.started is bool && d.picks is list &&
           d.uids.size() >= 1 && d.uids.size() <= 5 &&
-          d.names.size() == d.uids.size() && d.nameKeys.size() == d.uids.size() &&
+          d.names.size() == d.uids.size() && d.nameKeys.size() == d.uids.size() && d.order.size() == d.uids.size() &&
           d.uids.toSet().size() == d.uids.size() && d.nameKeys.toSet().size() == d.nameKeys.size() &&
+          d.order.toSet().size() == d.order.size() && d.order.hasAll(d.uids) &&
           d.picks.size() <= 20 && d.picks.toSet().size() == d.picks.size() &&
           d.picks.hasOnly(["alexis-levine", "an-thien-an-nguyen", "ana-sani", "angelica-jelly-loblack", "brady-booker", "carter-krull", "cristian-chavez", "danny-kilby-kilby", "devin-way", "eric-macksoud", "jenna-doore", "kristin-flickinger", "lewis-kelly", "linnea-capobianco", "maggie-nestor", "mike-pinsky", "ori-jean-charles", "patt-cannaday", "rob-antonson", "sharonda-cox"]);
       }
@@ -381,18 +382,26 @@ service cloud.firestore {
       }
       function joinOnly(before, after) {
         let n = before.uids.size();
-        return n < 5 && before.picks.size() == 0 &&
+        return n < 5 && before.picks.size() == 0 && before.started == false && after.started == false &&
           after.uids.size() == n + 1 && validTeam(after, n) &&
           after.uids == before.uids.concat([request.auth.uid]) &&
           after.names == before.names.concat([after.names[n]]) &&
           after.nameKeys == before.nameKeys.concat([after.nameKeys[n]]) &&
+          after.order == before.order.concat([request.auth.uid]) &&
           after.picks == before.picks;
+      }
+      function organizerOnly(before, after) {
+        return isFantasyDraftAdmin() && before.started == false && before.picks.size() == 0 &&
+          ((after.diff(before).affectedKeys().hasOnly(["order"]) &&
+            after.order.hasAll(before.order) && after.order.hasOnly(before.order)) ||
+           (before.uids.size() == 5 && after.diff(before).affectedKeys().hasOnly(["started"]) &&
+            after.started == true));
       }
       function pickOnly(before, after) {
         let n = before.picks.size();
         let team = n < 5 ? n : n < 10 ? 9 - n : n < 15 ? n - 10 : 19 - n;
-        return before.uids.size() == 5 && n < 20 &&
-          before.uids[team] == request.auth.uid &&
+        return before.uids.size() == 5 && before.started == true && n < 20 &&
+          before.order[team] == request.auth.uid &&
           after.diff(before).affectedKeys().hasOnly(["picks"]) &&
           after.picks.size() == n + 1 &&
           after.picks == before.picks.concat([after.picks[n]]);
@@ -401,10 +410,11 @@ service cloud.firestore {
       allow list, delete: if false;
       allow create: if draftId == "survivor-51-2026" && isSignedIn() &&
         validShape(request.resource.data) && request.resource.data.uids.size() == 1 &&
+        request.resource.data.order == [request.auth.uid] && request.resource.data.started == false &&
         validTeam(request.resource.data, 0) && request.resource.data.picks.size() == 0;
       allow update: if draftId == "survivor-51-2026" && isSignedIn() &&
         validShape(request.resource.data) &&
-        (joinOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
+        (joinOnly(resource.data, request.resource.data) || organizerOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
     }
   }
 }
