@@ -417,6 +417,16 @@ service cloud.firestore {
         validShape(request.resource.data) &&
         (joinOnly(resource.data, request.resource.data) || organizerOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
     }
+    match /survivorSettings/{settingId} {
+      function validVideo(d) {
+        return d.keys().hasAll(["url"]) && d.keys().hasOnly(["url"]) &&
+          d.url is string && d.url.size() <= 500 &&
+          (d.url == "" || d.url.matches('^https://[^\\s]+$'));
+      }
+      allow get: if settingId == "survivor-51-2026";
+      allow list, delete: if false;
+      allow create, update: if settingId == "survivor-51-2026" && isFantasyDraftAdmin() && validVideo(request.resource.data);
+    }
     match /survivorScores/{scoreId} {
       function validScore(d) {
         return d.keys().hasAll(["bootOrder", "jurors", "finalists", "winner", "checkedAt", "sourceUrl"]) &&
