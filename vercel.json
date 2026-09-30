@@ -3,6 +3,14 @@
     {
       "path": "/api/rides/sync",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/survivor/scoring/sync",
+      "schedule": "0 4 * * 0"
+    },
+    {
+      "path": "/api/survivor/scoring/sync-winter",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

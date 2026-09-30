@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addTeam, addPick, emptyDraft, moveTeam, startDraft, teamForPick } from './draft.ts';
+import { addTeam, addPick, emptyDraft, moveTeam, shuffleOrder, startDraft, teamForPick } from './draft.ts';
 const cast = JSON.parse(readFileSync(new URL('./cast.json', import.meta.url), 'utf8')) as {id: string}[];
 const ids = cast.map(c => c.id);
 test('five-team snake finishes with four unique contestants per team', () => {
@@ -36,4 +36,16 @@ test('rejects duplicate names, sixth teams, pre-lobby picks, stale submissions a
   state=addPick(state,'a',ids[0],ids,0);
   assert.throws(()=>addPick(state,'u1',ids[0],ids,1));
   assert.throws(()=>addPick(state,'u1',ids[1],ids,0));
+});
+test('early test start shuffles joined teams and pauses at open slots',()=>{
+  let state=addTeam(emptyDraft(),'a','Team A');
+  state=addTeam(state,'b','Team B');
+  state=startDraft({...state,order:shuffleOrder(state.order,()=>0)});
+  assert.deepEqual(state.order,['b','a']);
+  state=addPick(state,'b',ids[0],ids,0);
+  state=addPick(state,'a',ids[1],ids,1);
+  assert.throws(()=>addPick(state,'b',ids[2],ids,2));
+  state=addTeam(state,'c','Team C');
+  state=addPick(state,'c',ids[2],ids,2);
+  assert.equal(state.picks.length,3);
 });

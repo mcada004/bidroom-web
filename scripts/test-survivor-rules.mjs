@@ -32,11 +32,13 @@ try {
  await assertFails(setDoc(ref(organizer),{...s,order:['u4','u1','u1','u3','u0']}));
  await assertSucceeds(setDoc(ref(organizer),changed));s=changed;
  await assertFails(setDoc(ref(clients[0]),{...s,started:true}));
- await assertSucceeds(setDoc(ref(organizer),{...s,started:true}));s={...s,started:true};
+ const shuffled={...s,order:[...s.order].reverse(),started:true};
+ await assertSucceeds(setDoc(ref(organizer),shuffled));s=shuffled;
  await assertFails(setDoc(ref(organizer),{...s,order:['u0','u1','u2','u3','u4']}));
  // Two devices submit for the same first turn: precisely one transaction can win.
- const results=await Promise.allSettled([0,1].map(n=>runTransaction(clients[4],async t=>{
-   const r=ref(clients[4]); const snap=await t.get(r); const before=snap.data();
+ const firstOwner=Number(s.order[0].slice(1));
+ const results=await Promise.allSettled([0,1].map(n=>runTransaction(clients[firstOwner],async t=>{
+   const r=ref(clients[firstOwner]); const snap=await t.get(r); const before=snap.data();
    if(before.picks.length!==0) throw new Error('stale');
    t.set(r,{...before,picks:[ids[n]]});
  })));
@@ -58,5 +60,14 @@ try {
  await assertSucceeds(deleteDoc(ref(organizer)));
  assert.equal((await getDoc(ref(publicDb))).exists(),false);
  await assertSucceeds(setDoc(ref(clients[1]),{uids:['u1'],names:['Fresh Team'],nameKeys:['fresh team'],order:['u1'],started:false,picks:[]}));
- console.log('PASS: guest access, organizer-only order, start and reset, five teams, snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
+ const early={uids:['u1'],names:['Fresh Team'],nameKeys:['fresh team'],order:['u1'],started:true,picks:[]};
+ await assertFails(setDoc(ref(clients[1]),early));
+ await assertSucceeds(setDoc(ref(organizer),early));
+ await assertSucceeds(setDoc(ref(clients[1]),{...early,picks:[ids[0]]}));
+ const late={...early,uids:['u1','u2'],names:['Fresh Team','Late Team'],nameKeys:['fresh team','late team'],order:['u1','u2'],picks:[ids[0]]};
+ await assertSucceeds(setDoc(ref(clients[2]),late));
+ await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{bootOrder:[]}));
+ await assertSucceeds(getDoc(doc(publicDb,'survivorScores','survivor-51-2026')));
+ await assertFails(getDocs(collection(publicDb,'survivorScores')));
+ console.log('PASS: guest access, organizer-only shuffle/start/reset, early testing and late join, five teams, snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
 } finally {await env.cleanup();}
