@@ -368,7 +368,7 @@ service cloud.firestore {
         return d.keys().hasAll(["uids", "names", "nameKeys", "order", "started", "picks"]) &&
           d.keys().hasOnly(["uids", "names", "nameKeys", "order", "started", "picks"]) &&
           d.uids is list && d.names is list && d.nameKeys is list && d.order is list && d.started is bool && d.picks is list &&
-          d.uids.size() >= 1 && d.uids.size() <= 5 &&
+          d.uids.size() >= 1 && d.uids.size() <= 4 &&
           d.names.size() == d.uids.size() && d.nameKeys.size() == d.uids.size() && d.order.size() == d.uids.size() &&
           d.uids.toSet().size() == d.uids.size() && d.nameKeys.toSet().size() == d.nameKeys.size() &&
           d.order.toSet().size() == d.order.size() && d.order.hasAll(d.uids) &&
@@ -382,7 +382,7 @@ service cloud.firestore {
       }
       function joinOnly(before, after) {
         let n = before.uids.size();
-        return n < 5 && before.picks.size() < 20 && after.started == before.started &&
+        return n < 4 && before.picks.size() < 20 && after.started == before.started &&
           after.uids.size() == n + 1 && validTeam(after, n) &&
           after.uids == before.uids.concat([request.auth.uid]) &&
           after.names == before.names.concat([after.names[n]]) &&
@@ -399,7 +399,7 @@ service cloud.firestore {
       }
       function pickOnly(before, after) {
         let n = before.picks.size();
-        let team = n < 5 ? n : n < 10 ? 9 - n : n < 15 ? n - 10 : 19 - n;
+        let team = n < 4 ? n : n < 8 ? 7 - n : n < 12 ? n - 8 : n < 16 ? 15 - n : n - 16;
         return before.started == true && n < 20 &&
           before.order[team] == request.auth.uid &&
           after.diff(before).affectedKeys().hasOnly(["picks"]) &&
