@@ -10,10 +10,7 @@ export async function refreshSurvivorScoring() {
   const projectId = getFirestoreProjectId();
   if (!projectId) throw new Error('Scoring database is not configured.');
   const token = await getFirestoreServiceAccessToken();
-  const source = await fetch(SCORE_SOURCE, { headers: { 'User-Agent': 'Bidroom Survivor 51 scoring/1.0 (fan draft)', Accept: 'text/html' }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
-  if (!source.ok) throw new Error(`Season source returned HTTP ${source.status}. Scores were not changed.`);
-  const checkedAt = new Date().toISOString();
-  const parsed = parseSurvivorResults(await source.text(), checkedAt);
+  const parsed = await fetchSurvivorSourceResults();
   const url = docUrl(projectId);
   const auth = { Authorization: `Bearer ${token}` };
   const existing = await fetch(url, { headers: auth, cache: 'no-store' });
@@ -28,4 +25,11 @@ export async function refreshSurvivorScoring() {
   const saved = await fetch(writeUrl, { method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }), cache: 'no-store' });
   if (!saved.ok) throw new Error('Scores changed during refresh. Please retry.');
   return { ...next, newEliminations: next.bootOrder.length - previous.bootOrder.length };
+}
+
+export async function fetchSurvivorSourceResults() {
+  const source = await fetch(SCORE_SOURCE, { headers: { 'User-Agent': 'Bidroom Survivor 51 scoring/1.0 (fan draft)', Accept: 'text/html' }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
+  if (!source.ok) throw new Error(`Season source returned HTTP ${source.status}. Scores were not changed.`);
+  const checkedAt = new Date().toISOString();
+  return parseSurvivorResults(await source.text(), checkedAt);
 }

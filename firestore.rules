@@ -418,8 +418,26 @@ service cloud.firestore {
         (joinOnly(resource.data, request.resource.data) || organizerOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
     }
     match /survivorScores/{scoreId} {
+      function validScore(d) {
+        return d.keys().hasAll(["bootOrder", "jurors", "finalists", "winner", "checkedAt", "sourceUrl"]) &&
+          d.keys().hasOnly(["bootOrder", "jurors", "finalists", "winner", "checkedAt", "sourceUrl"]) &&
+          d.bootOrder is list && d.jurors is list && d.finalists is list &&
+          d.bootOrder.size() <= 17 && d.jurors.size() <= 20 && d.finalists.size() <= 3 &&
+          d.bootOrder.toSet().size() == d.bootOrder.size() &&
+          d.jurors.toSet().size() == d.jurors.size() &&
+          d.finalists.toSet().size() == d.finalists.size() &&
+          (d.winner == null || d.winner is string) &&
+          d.checkedAt is string && d.sourceUrl == "https://en.wikipedia.org/wiki/Survivor_51";
+      }
       allow get: if scoreId == "survivor-51-2026";
-      allow list, create, update, delete: if false;
+      allow list, delete: if false;
+      allow create: if scoreId == "survivor-51-2026" && isFantasyDraftAdmin() && validScore(request.resource.data);
+      allow update: if scoreId == "survivor-51-2026" && isFantasyDraftAdmin() && validScore(request.resource.data) &&
+        request.resource.data.bootOrder.size() >= resource.data.bootOrder.size() &&
+        request.resource.data.bootOrder.hasAll(resource.data.bootOrder) &&
+        request.resource.data.jurors.hasAll(resource.data.jurors) &&
+        request.resource.data.finalists.hasAll(resource.data.finalists) &&
+        (resource.data.winner == null || request.resource.data.winner == resource.data.winner);
     }
   }
 }
