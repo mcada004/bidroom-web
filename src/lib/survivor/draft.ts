@@ -1,6 +1,7 @@
 export const SURVIVOR_ROOM = 'survivor-51-2026';
-export const TEAM_COUNT = 5;
+export const TEAM_COUNT = 4;
 export const PICK_COUNT = 20;
+export const PICKS_PER_TEAM = PICK_COUNT / TEAM_COUNT;
 export type DraftState = { uids: string[]; names: string[]; nameKeys: string[]; order: string[]; started: boolean; picks: string[] };
 export const emptyDraft = (): DraftState => ({ uids: [], names: [], nameKeys: [], order: [], started: false, picks: [] });
 export function teamForPick(pick: number): number {
@@ -11,7 +12,7 @@ export function addTeam(state: DraftState, uid: string, rawName: string): DraftS
   if (state.uids.includes(uid)) return state;
   const name = rawName.trim().replace(/\s+/g, ' ');
   if (name.length < 2 || name.length > 24 || /[\x00-\x1f\x7f]/.test(name)) throw new Error('Use a team name between 2 and 24 characters.');
-  if (state.uids.length >= TEAM_COUNT) throw new Error('All five teams have joined. You can still watch the draft.');
+  if (state.uids.length >= TEAM_COUNT) throw new Error('All four teams have joined. You can still watch the draft.');
   if (state.nameKeys.includes(name.toLowerCase())) throw new Error('That team name is taken. Choose a different name.');
   return { ...state, uids: [...state.uids, uid], names: [...state.names, name], nameKeys: [...state.nameKeys, name.toLowerCase()], order: [...state.order, uid] };
 }
