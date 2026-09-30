@@ -69,6 +69,14 @@ try {
  await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{bootOrder:[]}));
  await assertSucceeds(getDoc(doc(publicDb,'survivorScores','survivor-51-2026')));
  await assertFails(getDocs(collection(publicDb,'survivorScores')));
+ const videoRef=db=>doc(db,'survivorSettings','survivor-51-2026');
+ await assertSucceeds(getDoc(videoRef(publicDb)));
+ await assertFails(getDocs(collection(publicDb,'survivorSettings')));
+ await assertFails(setDoc(videoRef(clients[0]),{url:'https://example.com/video.mp4'}));
+ await assertFails(setDoc(videoRef(organizer),{url:'javascript:alert(1)'}));
+ await assertSucceeds(setDoc(videoRef(organizer),{url:'https://example.com/video.mp4'}));
+ await assertSucceeds(setDoc(videoRef(organizer),{url:''}));
+ await assertFails(deleteDoc(videoRef(organizer)));
  const score={bootOrder:[],jurors:[],finalists:[],winner:null,checkedAt:new Date().toISOString(),sourceUrl:'https://en.wikipedia.org/wiki/Survivor_51'};
  await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),score));
  await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));

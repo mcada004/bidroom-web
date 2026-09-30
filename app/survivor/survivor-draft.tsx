@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { signInAnonymously } from 'firebase/auth';
-import { deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { deleteDoc, doc, onSnapshot, runTransaction, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { auth, db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/context/AuthContext';
 import { addPick, addTeam, emptyDraft, moveTeam, shuffleOrder, startDraft, SURVIVOR_ROOM, TEAM_COUNT, PICK_COUNT, PICKS_PER_TEAM, teamForPick, type DraftState } from '@/src/lib/survivor/draft';
 import { contestantPoints, emptyResults, SCORE_ROOM, validateResults, type SeasonResults } from '@/src/lib/survivor/scoring';
+import { videoSource, VIDEO_ROOM, type DraftVideo } from '@/src/lib/survivor/video';
 import cast from '@/src/lib/survivor/cast.json';
 const colors = ['#fbbf24', '#6ee7b7', '#93c5fd', '#f9a8d4'];
 export default function SurvivorDraft() {
@@ -25,21 +26,50 @@ export default function SurvivorDraft() {
   const [confirmEarlyStart, setConfirmEarlyStart] = useState(false);
   const [selection, setSelection] = useState<{ id: string; pick: number } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoDraft, setVideoDraft] = useState('');
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [videoNotice, setVideoNotice] = useState('');
+  const [roundOneEvent, setRoundOneEvent] = useState<string | null>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const previousPicks = useRef<number | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const resetDialog = useRef<HTMLDialogElement>(null);
   const earlyDialog = useRef<HTMLDialogElement>(null);
+  const videoDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     return onSnapshot(doc(db, 'survivorDrafts', SURVIVOR_ROOM), { includeMetadataChanges: true }, (snapshot) => {
-      setState(snapshot.exists() ? snapshot.data() as DraftState : emptyDraft());
+      const next = snapshot.exists() ? snapshot.data() as DraftState : emptyDraft();
+      if (!snapshot.metadata.fromCache) {
+        if (previousPicks.current !== null && previousPicks.current < TEAM_COUNT && next.picks.length >= TEAM_COUNT && next.started) {
+          setRoundOneEvent(`survivor-video:${next.uids.join(',')}:${next.picks.slice(0, TEAM_COUNT).join(',')}`);
+        }
+        previousPicks.current = next.picks.length;
+      }
+      setState(next);
       setReady(true); setConnected(!snapshot.metadata.fromCache);
     }, () => { setConnected(false); setReady(true); setError('Could not connect to the shared draft. Please retry.'); });
   }, [retry]);
   useEffect(() => onSnapshot(doc(db, 'survivorScores', SCORE_ROOM), snapshot => {
     setScores(snapshot.exists() ? snapshot.data() as SeasonResults : emptyResults());
   }, () => setScoreNotice('The scoreboard is temporarily unavailable.')), []);
+  useEffect(() => onSnapshot(doc(db, 'survivorSettings', VIDEO_ROOM), snapshot => {
+    const url = snapshot.exists() ? (snapshot.data() as DraftVideo).url : '';
+    setVideoUrl(url); setVideoDraft(url); setVideoLoaded(true);
+  }, () => { setVideoLoaded(true); setVideoNotice('Video settings are temporarily unavailable.'); }), []);
+  useEffect(() => {
+    if (!roundOneEvent || !videoLoaded) return;
+    if (videoSource(videoUrl) && !window.localStorage.getItem(roundOneEvent)) {
+      window.localStorage.setItem(roundOneEvent, 'shown');
+      setVideoOpen(true);
+    }
+    setRoundOneEvent(null);
+  }, [roundOneEvent, videoLoaded, videoUrl]);
   useEffect(() => { if (selection) dialog.current?.showModal(); else dialog.current?.close(); }, [selection]);
   useEffect(() => { if (confirmReset) resetDialog.current?.showModal(); else resetDialog.current?.close(); }, [confirmReset]);
   useEffect(() => { if (confirmEarlyStart) earlyDialog.current?.showModal(); else earlyDialog.current?.close(); }, [confirmEarlyStart]);
+  useEffect(() => { if (videoOpen) videoDialog.current?.showModal(); else videoDialog.current?.close(); }, [videoOpen]);
   const organizer = user?.email?.toLowerCase() === 'mcada004@gmail.com';
   const myTeam = user ? state.order.indexOf(user.uid) : -1;
   const finished = state.picks.length === PICK_COUNT;
@@ -151,6 +181,18 @@ export default function SurvivorDraft() {
     } catch (e) { setScoreNotice(e instanceof Error ? e.message : 'Could not check results.'); }
     finally { setScoreBusy(false); }
   }
+  async function saveVideo(event: React.FormEvent) {
+    event.preventDefault();
+    const url = videoDraft.trim();
+    if (url && !videoSource(url)) { setVideoNotice('Use an unlisted YouTube or Vimeo link, or a direct HTTPS .mp4 or .webm link.'); return; }
+    setVideoBusy(true); setVideoNotice('');
+    try {
+      await setDoc(doc(db, 'survivorSettings', VIDEO_ROOM), { url } satisfies DraftVideo);
+      setVideoNotice(url ? 'Video saved. It will appear after pick four.' : 'Video removed.');
+    } catch { setVideoNotice('Could not save the video. Check your connection and try again.'); }
+    finally { setVideoBusy(false); }
+  }
+  const playableVideo = videoSource(videoUrl);
   const chosen = cast.find(c => c.id === selection?.id);
   return <main className="sv-page">
     <header className="sv-heading"><div><p className="sv-eyebrow">BIDROOM / FANTASY DRAFT</p><h1>SURVIVOR <span>51</span></h1><p className="sv-subtitle">{TEAM_COUNT} teams <span>·</span> {PICK_COUNT} castaways <span>·</span> {PICKS_PER_TEAM} rounds</p></div><button className="sv-secondary" onClick={share}>Share draft</button></header>
@@ -166,6 +208,8 @@ export default function SurvivorDraft() {
     {myTeam < 0 && state.uids.length === TEAM_COUNT && <p className="sv-notice">All four spots are filled. You’re watching the draft. To pick for an existing team, return in the browser you joined with.</p>}
     {!state.started && state.uids.length > 0 && <section className="sv-order" aria-labelledby="sv-order-heading"><div><h2 id="sv-order-heading">Draft order</h2><p>Live lobby · {state.uids.length} of {TEAM_COUNT} joined. Round one follows the numbered slots; later rounds reverse.</p></div>{organizer ? <><ol>{state.order.map((uid, i) => <li key={uid}><strong>{i + 1}. {teamName(i)}</strong><div><button type="button" className="sv-secondary" aria-label={`Move ${teamName(i)} up`} disabled={busy || !connected || i === 0} onClick={() => setOrder(i, i - 1)}>Up</button><button type="button" className="sv-secondary" aria-label={`Move ${teamName(i)} down`} disabled={busy || !connected || i === state.order.length - 1} onClick={() => setOrder(i, i + 1)}>Down</button></div></li>)}</ol><div className="sv-start-actions"><button type="button" className="sv-primary" disabled={busy || !connected} onClick={() => state.uids.length < TEAM_COUNT ? setConfirmEarlyStart(true) : beginDraft()}>{busy ? 'Starting…' : state.uids.length === TEAM_COUNT ? 'Start draft · shuffle teams' : 'Start test draft now'}</button>{state.uids.length === TEAM_COUNT && <button type="button" className="sv-secondary" disabled={busy || !connected} onClick={() => beginDraft(false)}>Start with displayed order</button>}</div><p className="sv-order-hint">The default start shuffles joined teams and locks the order. Your manual order is used only if you choose “Start with displayed order.”</p></> : <p className="sv-order-hint">{loading ? 'Checking organizer access…' : <>Brian can set the order and start the draft. <Link href="/login">Organizer sign in</Link></>}</p>}</section>}
     {organizer && state.uids.length > 0 && <div className="sv-reset"><button type="button" className="sv-reset-button" disabled={busy || !connected} onClick={() => setConfirmReset(true)}>Reset draft</button><p>Clears every team and pick so everyone can start over.</p></div>}
+    {organizer && <section className="sv-video-setting" aria-labelledby="sv-video-heading"><h2 id="sv-video-heading">After round one video</h2><p>Paste an unlisted YouTube or Vimeo link, or a direct HTTPS .mp4 or .webm file. Everyone watching the live board will see it after pick four. Save it before the round ends.</p><form onSubmit={saveVideo}><label htmlFor="sv-video-url">Video link</label><input id="sv-video-url" type="url" placeholder="https://youtu.be/…" value={videoDraft} onChange={e => setVideoDraft(e.target.value)} /><button type="submit" className="sv-primary" disabled={videoBusy || !videoLoaded}>{videoBusy ? 'Saving…' : 'Save video'}</button>{playableVideo && <button type="button" className="sv-secondary" onClick={() => setVideoOpen(true)}>Preview video</button>}</form>{videoNotice && <p role="status">{videoNotice}</p>}</section>}
+    {state.picks.length >= TEAM_COUNT && playableVideo && <div className="sv-video-replay"><button type="button" className="sv-secondary" onClick={() => setVideoOpen(true)}>Watch the round one video</button></div>}
     <section className="sv-scores" aria-labelledby="sv-scores-heading"><div className="sv-score-heading"><div><h2 id="sv-scores-heading">Scoreboard</h2><p>Elimination order +5 jury · +10 final tribal · +20 winner</p></div>{organizer && <button type="button" className="sv-secondary" disabled={scoreBusy} onClick={updateScoring}>{scoreBusy ? 'Checking…' : 'Please update scoring'}</button>}</div>
       {scoreNotice && <p className="sv-score-message" role="status">{scoreNotice}</p>}
       <ol>{state.order.map((uid, slot) => { const picks = state.picks.filter((_, i) => teamForPick(i) === slot); const total = picks.reduce((sum, id) => sum + contestantPoints(id, scores), 0); return <li key={uid}><span>{teamName(slot)}</span><strong>{total} pts</strong><small>{picks.length ? picks.map(id => `${cast.find(c => c.id === id)?.name ?? id} ${contestantPoints(id, scores)}`).join(' · ') : 'No picks yet'}</small></li>; })}</ol>
@@ -181,5 +225,6 @@ export default function SurvivorDraft() {
     <dialog className="sv-dialog" ref={dialog} onCancel={e => { if (busy) e.preventDefault(); else setSelection(null); }} onClose={() => setSelection(null)} aria-labelledby="sv-confirm-title"><h2 id="sv-confirm-title">Draft {chosen?.name}?</h2><p>This locks in pick #{(selection?.pick ?? 0) + 1} for {teamName(myTeam)}. Picks are final.</p><div><button className="sv-secondary" disabled={busy} onClick={() => setSelection(null)}>Cancel</button><button className="sv-primary" disabled={busy || !connected || !myTurn} onClick={draft}>{busy ? 'Saving pick…' : 'Confirm pick'}</button></div></dialog>
     <dialog className="sv-dialog" ref={resetDialog} onCancel={e => { if (busy) e.preventDefault(); else setConfirmReset(false); }} onClose={() => setConfirmReset(false)} aria-labelledby="sv-reset-title"><h2 id="sv-reset-title">Reset the entire draft?</h2><p>This will remove every team, all picks, and the draft order for everyone. The four teams will need to join again. This cannot be undone.</p><div><button type="button" className="sv-secondary" disabled={busy} onClick={() => setConfirmReset(false)}>Cancel</button><button type="button" className="sv-reset-confirm" disabled={busy || !connected || !organizer} onClick={resetDraft}>{busy ? 'Resetting…' : 'Reset everything'}</button></div></dialog>
     <dialog className="sv-dialog" ref={earlyDialog} onCancel={e => { if (busy) e.preventDefault(); else setConfirmEarlyStart(false); }} onClose={() => setConfirmEarlyStart(false)} aria-labelledby="sv-early-title"><h2 id="sv-early-title">Start a test draft early?</h2><p>This shuffles the teams already here. New teams can still join, but picks will pause whenever the next slot is empty. To run the real four-team shuffle later, you’ll need to reset the board first.</p><div><button type="button" className="sv-secondary" disabled={busy} onClick={() => setConfirmEarlyStart(false)}>Cancel</button><button type="button" className="sv-primary" disabled={busy || !connected || !organizer} onClick={() => beginDraft()}>{busy ? 'Starting…' : 'Start test draft'}</button></div></dialog>
+    <dialog className="sv-video-dialog" ref={videoDialog} onClose={() => setVideoOpen(false)} aria-labelledby="sv-video-title"><div className="sv-video-top"><div><p className="sv-eyebrow">A MESSAGE FROM OUR SPONSOR</p><h2 id="sv-video-title">Round one is in the books</h2></div><button type="button" className="sv-secondary" onClick={() => setVideoOpen(false)}>Close video</button></div>{videoOpen && playableVideo && <div className="sv-video-frame">{playableVideo.kind === 'embed' ? <iframe src={playableVideo.src} title="Round one parody video" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : <video src={playableVideo.src} controls autoPlay playsInline />}</div>}<p>If playback does not begin automatically, press play in the video. The draft remains open while it plays.</p></dialog>
   </main>;
 }
