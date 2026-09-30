@@ -69,5 +69,10 @@ try {
  await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{bootOrder:[]}));
  await assertSucceeds(getDoc(doc(publicDb,'survivorScores','survivor-51-2026')));
  await assertFails(getDocs(collection(publicDb,'survivorScores')));
+ const score={bootOrder:[],jurors:[],finalists:[],winner:null,checkedAt:new Date().toISOString(),sourceUrl:'https://en.wikipedia.org/wiki/Survivor_51'};
+ await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),score));
+ await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));
+ await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));
+ await assertFails(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),score));
  console.log('PASS: guest access, organizer-only shuffle/start/reset, early testing and late join, five teams, snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
 } finally {await env.cleanup();}

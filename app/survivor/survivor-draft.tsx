@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { auth, db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/context/AuthContext';
 import { addPick, addTeam, emptyDraft, moveTeam, shuffleOrder, startDraft, SURVIVOR_ROOM, teamForPick, type DraftState } from '@/src/lib/survivor/draft';
-import { contestantPoints, emptyResults, SCORE_ROOM, type SeasonResults } from '@/src/lib/survivor/scoring';
+import { contestantPoints, emptyResults, SCORE_ROOM, validateResults, type SeasonResults } from '@/src/lib/survivor/scoring';
 import cast from '@/src/lib/survivor/cast.json';
 const colors = ['#fbbf24', '#6ee7b7', '#93c5fd', '#f9a8d4', '#c4b5fd'];
 export default function SurvivorDraft() {
@@ -136,9 +136,18 @@ export default function SurvivorDraft() {
     setScoreBusy(true); setScoreNotice('Checking season results…');
     try {
       const response = await fetch('/api/survivor/scoring/sync', { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: 'no-store' });
-      const result = await response.json() as { error?: string; newEliminations?: number };
+      const result = await response.json() as SeasonResults & { error?: string };
       if (!response.ok) throw new Error(result.error ?? 'Could not check results.');
-      setScoreNotice(result.newEliminations ? `${result.newEliminations} new elimination${result.newEliminations === 1 ? '' : 's'} scored.` : 'Checked the source; no new eliminations found.');
+      let newEliminations = 0;
+      await runTransaction(db, async transaction => {
+        const ref = doc(db, 'survivorScores', SCORE_ROOM);
+        const snapshot = await transaction.get(ref);
+        const prior = snapshot.exists() ? snapshot.data() as SeasonResults : emptyResults();
+        const next = validateResults(result, prior);
+        newEliminations = next.bootOrder.length - prior.bootOrder.length;
+        transaction.set(ref, next);
+      });
+      setScoreNotice(newEliminations ? `${newEliminations} new elimination${newEliminations === 1 ? '' : 's'} scored.` : 'Checked the source; no new eliminations found.');
     } catch (e) { setScoreNotice(e instanceof Error ? e.message : 'Could not check results.'); }
     finally { setScoreBusy(false); }
   }
