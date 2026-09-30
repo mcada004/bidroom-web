@@ -382,7 +382,7 @@ service cloud.firestore {
       }
       function joinOnly(before, after) {
         let n = before.uids.size();
-        return n < 5 && before.picks.size() == 0 && before.started == false && after.started == false &&
+        return n < 5 && before.picks.size() < 20 && after.started == before.started &&
           after.uids.size() == n + 1 && validTeam(after, n) &&
           after.uids == before.uids.concat([request.auth.uid]) &&
           after.names == before.names.concat([after.names[n]]) &&
@@ -392,15 +392,15 @@ service cloud.firestore {
       }
       function organizerOnly(before, after) {
         return isFantasyDraftAdmin() && before.started == false && before.picks.size() == 0 &&
-          ((after.diff(before).affectedKeys().hasOnly(["order"]) &&
+          ((after.started == false && after.diff(before).affectedKeys().hasOnly(["order"]) &&
             after.order.hasAll(before.order) && after.order.hasOnly(before.order)) ||
-           (before.uids.size() == 5 && after.diff(before).affectedKeys().hasOnly(["started"]) &&
-            after.started == true));
+           (after.diff(before).affectedKeys().hasOnly(["started", "order"]) &&
+            after.started == true && after.order.hasAll(before.order) && after.order.hasOnly(before.order)));
       }
       function pickOnly(before, after) {
         let n = before.picks.size();
         let team = n < 5 ? n : n < 10 ? 9 - n : n < 15 ? n - 10 : 19 - n;
-        return before.uids.size() == 5 && before.started == true && n < 20 &&
+        return before.started == true && n < 20 &&
           before.order[team] == request.auth.uid &&
           after.diff(before).affectedKeys().hasOnly(["picks"]) &&
           after.picks.size() == n + 1 &&
@@ -416,6 +416,10 @@ service cloud.firestore {
       allow update: if draftId == "survivor-51-2026" && isSignedIn() &&
         validShape(request.resource.data) &&
         (joinOnly(resource.data, request.resource.data) || organizerOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
+    }
+    match /survivorScores/{scoreId} {
+      allow get: if scoreId == "survivor-51-2026";
+      allow list, create, update, delete: if false;
     }
   }
 }

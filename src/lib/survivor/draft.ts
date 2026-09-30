@@ -23,15 +23,24 @@ export function moveTeam(state: DraftState, from: number, to: number): DraftStat
   return { ...state, order };
 }
 export function startDraft(state: DraftState): DraftState {
-  if (state.uids.length !== TEAM_COUNT) throw new Error('Wait for all five teams to join.');
+  if (state.uids.length < 1) throw new Error('Wait for a team to join.');
   if (state.started || state.picks.length) throw new Error('The draft has already started.');
   return { ...state, started: true };
 }
+export function shuffleOrder(order: string[], randomIndex: (max: number) => number): string[] {
+  const shuffled = [...order];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = randomIndex(i + 1);
+    if (!Number.isInteger(j) || j < 0 || j > i) throw new Error('Invalid shuffle value.');
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 export function addPick(state: DraftState, uid: string, contestant: string, validIds: string[], expectedPick: number): DraftState {
-  if (state.uids.length !== TEAM_COUNT || !state.started) throw new Error('Wait for the organizer to start the draft.');
+  if (!state.started) throw new Error('Wait for the organizer to start the draft.');
   if (state.picks.length >= PICK_COUNT) throw new Error('The draft is complete.');
   if (state.picks.length !== expectedPick) throw new Error('The board changed. Review the current pick and try again.');
-  if (state.order[teamForPick(state.picks.length)] !== uid) throw new Error('It is not your turn yet.');
+  if (state.order[teamForPick(state.picks.length)] !== uid) throw new Error('It is not your turn yet. If this is a test draft, wait for the next team to join.');
   if (!validIds.includes(contestant)) throw new Error('This contestant is not in the draft.');
   if (state.picks.includes(contestant)) throw new Error('This contestant has already been drafted.');
   return { ...state, picks: [...state.picks, contestant] };
