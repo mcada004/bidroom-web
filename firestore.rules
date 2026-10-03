@@ -365,15 +365,19 @@ service cloud.firestore {
     // Survivor has its own public room. Existing feature permissions are unchanged.
     match /survivorDrafts/{draftId} {
       function validShape(d) {
-        return d.keys().hasAll(["uids", "names", "nameKeys", "order", "started", "picks"]) &&
-          d.keys().hasOnly(["uids", "names", "nameKeys", "order", "started", "picks"]) &&
+        return d.keys().hasAll(["uids", "names", "nameKeys", "order", "started", "picks", "teamCount"]) &&
+          d.keys().hasOnly(["uids", "names", "nameKeys", "order", "started", "picks", "teamCount"]) &&
           d.uids is list && d.names is list && d.nameKeys is list && d.order is list && d.started is bool && d.picks is list &&
-          d.uids.size() >= 1 && d.uids.size() <= 4 &&
+          d.teamCount is int && d.teamCount >= 1 && d.teamCount <= 5 &&
+          d.uids.size() <= d.teamCount &&
           d.names.size() == d.uids.size() && d.nameKeys.size() == d.uids.size() && d.order.size() == d.uids.size() &&
           d.uids.toSet().size() == d.uids.size() && d.nameKeys.toSet().size() == d.nameKeys.size() &&
           d.order.toSet().size() == d.order.size() && d.order.hasAll(d.uids) &&
           d.picks.size() <= 20 && d.picks.toSet().size() == d.picks.size() &&
           d.picks.hasOnly(["alexis-levine", "an-thien-an-nguyen", "ana-sani", "angelica-jelly-loblack", "brady-booker", "carter-krull", "cristian-chavez", "danny-kilby-kilby", "devin-way", "eric-macksoud", "jenna-doore", "kristin-flickinger", "lewis-kelly", "linnea-capobianco", "maggie-nestor", "mike-pinsky", "ori-jean-charles", "patt-cannaday", "rob-antonson", "sharonda-cox"]);
+      }
+      function priorCount(d) {
+        return "teamCount" in d ? d.teamCount : 4;
       }
       function validTeam(d, index) {
         return d.uids[index] == request.auth.uid &&
@@ -382,25 +386,29 @@ service cloud.firestore {
       }
       function joinOnly(before, after) {
         let n = before.uids.size();
-        return n < 4 && before.picks.size() < 20 && after.started == before.started &&
+        return before.started == false && n < priorCount(before) && after.teamCount == priorCount(before) &&
           after.uids.size() == n + 1 && validTeam(after, n) &&
           after.uids == before.uids.concat([request.auth.uid]) &&
           after.names == before.names.concat([after.names[n]]) &&
           after.nameKeys == before.nameKeys.concat([after.nameKeys[n]]) &&
           after.order == before.order.concat([request.auth.uid]) &&
-          after.picks == before.picks;
+          after.picks == before.picks && after.started == before.started;
       }
       function organizerOnly(before, after) {
         return isFantasyDraftAdmin() && before.started == false && before.picks.size() == 0 &&
-          ((after.started == false && after.diff(before).affectedKeys().hasOnly(["order"]) &&
+          after.uids == before.uids && after.names == before.names && after.nameKeys == before.nameKeys &&
+          after.picks == before.picks &&
+          ((after.started == false && after.teamCount >= before.uids.size() &&
             after.order.hasAll(before.order) && after.order.hasOnly(before.order)) ||
-           (after.diff(before).affectedKeys().hasOnly(["started", "order"]) &&
-            after.started == true && after.order.hasAll(before.order) && after.order.hasOnly(before.order)));
+           (after.started == true && before.uids.size() >= 1 &&
+            after.teamCount == before.uids.size() &&
+            after.order.hasAll(before.order) && after.order.hasOnly(before.order)));
       }
       function pickOnly(before, after) {
         let n = before.picks.size();
-        let team = n < 4 ? n : n < 8 ? 7 - n : n < 12 ? n - 8 : n < 16 ? 15 - n : n - 16;
-        return before.started == true && n < 20 &&
+        let t = priorCount(before);
+        let team = n % (2 * t) < t ? n % t : t - 1 - n % t;
+        return before.started == true && n < 20 && after.teamCount == t &&
           before.order[team] == request.auth.uid &&
           after.diff(before).affectedKeys().hasOnly(["picks"]) &&
           after.picks.size() == n + 1 &&
@@ -410,22 +418,14 @@ service cloud.firestore {
       allow list: if false;
       allow delete: if draftId == "survivor-51-2026" && isFantasyDraftAdmin();
       allow create: if draftId == "survivor-51-2026" && isSignedIn() &&
-        validShape(request.resource.data) && request.resource.data.uids.size() == 1 &&
-        request.resource.data.order == [request.auth.uid] && request.resource.data.started == false &&
-        validTeam(request.resource.data, 0) && request.resource.data.picks.size() == 0;
+        validShape(request.resource.data) && request.resource.data.started == false &&
+        request.resource.data.picks.size() == 0 &&
+        ((isFantasyDraftAdmin() && request.resource.data.uids.size() == 0 && request.resource.data.order.size() == 0) ||
+         (request.resource.data.uids.size() == 1 && request.resource.data.teamCount == 4 &&
+          request.resource.data.order == [request.auth.uid] && validTeam(request.resource.data, 0)));
       allow update: if draftId == "survivor-51-2026" && isSignedIn() &&
         validShape(request.resource.data) &&
         (joinOnly(resource.data, request.resource.data) || organizerOnly(resource.data, request.resource.data) || pickOnly(resource.data, request.resource.data));
-    }
-    match /survivorSettings/{settingId} {
-      function validVideo(d) {
-        return d.keys().hasAll(["url"]) && d.keys().hasOnly(["url"]) &&
-          d.url is string && d.url.size() <= 500 &&
-          (d.url == "" || d.url.matches('^https://[^\\s]+$'));
-      }
-      allow get: if settingId == "survivor-51-2026";
-      allow list, delete: if false;
-      allow create, update: if settingId == "survivor-51-2026" && isFantasyDraftAdmin() && validVideo(request.resource.data);
     }
     match /survivorScores/{scoreId} {
       function validScore(d) {
