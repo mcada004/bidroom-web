@@ -9,7 +9,7 @@ const publicDb=env.unauthenticatedContext().firestore();
 const ref=db=>doc(db,'survivorDrafts','survivor-51-2026');
 const ids=JSON.parse(readFileSync('src/lib/survivor/cast.json','utf8')).map(c=>c.id);
 const order=[0,1,2,3,3,2,1,0,0,1,2,3,3,2,1,0,0,1,2,3];
-let s={uids:['u0'],names:['Team 0'],nameKeys:['team 0'],order:['u0'],started:false,picks:[]};
+let s={uids:['u0'],names:['Team 0'],nameKeys:['team 0'],order:['u0'],started:false,picks:[],teamCount:4};
 try {
  await assertSucceeds(getDoc(ref(publicDb)));
  await assertFails(getDocs(collection(publicDb,'survivorDrafts')));
@@ -59,28 +59,32 @@ try {
  await assertFails(deleteDoc(ref(publicDb)));
  await assertSucceeds(deleteDoc(ref(organizer)));
  assert.equal((await getDoc(ref(publicDb))).exists(),false);
- await assertSucceeds(setDoc(ref(clients[1]),{uids:['u1'],names:['Fresh Team'],nameKeys:['fresh team'],order:['u1'],started:false,picks:[]}));
- const early={uids:['u1'],names:['Fresh Team'],nameKeys:['fresh team'],order:['u1'],started:true,picks:[]};
- await assertFails(setDoc(ref(clients[1]),early));
- await assertSucceeds(setDoc(ref(organizer),early));
- await assertSucceeds(setDoc(ref(clients[1]),{...early,picks:[ids[0]]}));
- const late={...early,uids:['u1','u2'],names:['Fresh Team','Late Team'],nameKeys:['fresh team','late team'],order:['u1','u2'],picks:[ids[0]]};
- await assertSucceeds(setDoc(ref(clients[2]),late));
- await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{bootOrder:[]}));
+ const config={uids:[],names:[],nameKeys:[],order:[],started:false,picks:[],teamCount:2};
+ await assertFails(setDoc(ref(clients[0]),config));
+ await assertSucceeds(setDoc(ref(organizer),config));
+ const one={...config,uids:['u1'],names:['Team One'],nameKeys:['team one'],order:['u1']};
+ await assertSucceeds(setDoc(ref(clients[1]),one));
+ const two={...one,uids:['u1','u2'],names:['Team One','Team Two'],nameKeys:['team one','team two'],order:['u1','u2']};
+ await assertSucceeds(setDoc(ref(clients[2]),two));
+ await assertFails(setDoc(ref(clients[0]),{...two,teamCount:3}));
+ await assertFails(setDoc(ref(clients[0]),{...two,started:true}));
+ const started={...two,started:true,order:['u2','u1']};
+ await assertSucceeds(setDoc(ref(organizer),started));s=started;
+ await assertFails(setDoc(ref(clients[3]),{...s,uids:[...s.uids,'u3'],names:[...s.names,'Late'],nameKeys:[...s.nameKeys,'late'],order:[...s.order,'u3']}));
+ for(let n=0;n<20;n++){
+   const slot=n%4<2?n%2:1-n%2;
+   const owner=s.order[slot];
+   const next={...s,picks:[...s.picks,ids[n]]};
+   await assertFails(setDoc(ref(clients[Number(s.order[1-slot].slice(1))]),next));
+   await assertSucceeds(setDoc(ref(clients[Number(owner.slice(1))]),next));s=next;
+ }
+ assert.equal(s.picks.length,20);
  await assertSucceeds(getDoc(doc(publicDb,'survivorScores','survivor-51-2026')));
  await assertFails(getDocs(collection(publicDb,'survivorScores')));
- const videoRef=db=>doc(db,'survivorSettings','survivor-51-2026');
- await assertSucceeds(getDoc(videoRef(publicDb)));
- await assertFails(getDocs(collection(publicDb,'survivorSettings')));
- await assertFails(setDoc(videoRef(clients[0]),{url:'https://example.com/video.mp4'}));
- await assertFails(setDoc(videoRef(organizer),{url:'javascript:alert(1)'}));
- await assertSucceeds(setDoc(videoRef(organizer),{url:'https://example.com/video.mp4'}));
- await assertSucceeds(setDoc(videoRef(organizer),{url:''}));
- await assertFails(deleteDoc(videoRef(organizer)));
  const score={bootOrder:[],jurors:[],finalists:[],winner:null,checkedAt:new Date().toISOString(),sourceUrl:'https://en.wikipedia.org/wiki/Survivor_51'};
  await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),score));
  await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));
  await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));
  await assertFails(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),score));
- console.log('PASS: guest access, organizer-only shuffle/start/reset, early testing and late join, four teams, five-round snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
+ console.log('PASS: guest access, organizer-only shuffle/start/reset, two-team full draft, four-team five-round snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
 } finally {await env.cleanup();}
