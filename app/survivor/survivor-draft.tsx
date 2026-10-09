@@ -138,16 +138,16 @@ export default function SurvivorDraft() {
       const response = await fetch('/api/survivor/scoring/sync', { method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` }, cache: 'no-store' });
       const result = await response.json() as SeasonResults & { error?: string };
       if (!response.ok) throw new Error(result.error ?? 'Could not check results.');
-      let newEliminations = 0;
+      let newDepartures = 0;
       await runTransaction(db, async transaction => {
         const ref = doc(db, 'survivorScores', SCORE_ROOM);
         const snapshot = await transaction.get(ref);
         const prior = snapshot.exists() ? snapshot.data() as SeasonResults : emptyResults();
         const next = validateResults(result, prior);
-        newEliminations = next.bootOrder.length - prior.bootOrder.length;
+        newDepartures = next.bootOrder.length - prior.bootOrder.length;
         transaction.set(ref, next);
       });
-      setScoreNotice(newEliminations ? `${newEliminations} new elimination${newEliminations === 1 ? '' : 's'} scored.` : 'Checked the source; no new eliminations found.');
+      setScoreNotice(newDepartures ? `${newDepartures} new departure${newDepartures === 1 ? '' : 's'} scored.` : 'Checked the source; no new departures found.');
     } catch (e) { setScoreNotice(e instanceof Error ? e.message : 'Could not check results.'); }
     finally { setScoreBusy(false); }
   }
@@ -182,7 +182,7 @@ export default function SurvivorDraft() {
     {!state.started && state.uids.length > 0 && <section className="sv-order" aria-labelledby="sv-order-heading"><div><h2 id="sv-order-heading">Draft order</h2><p>Live lobby · {state.uids.length} of {teamCount} joined. Round one follows the numbered slots; later rounds reverse.</p></div>{organizer ? <><ol>{state.order.map((uid, i) => <li key={uid}><strong>{i + 1}. {teamName(i)}</strong><div><button type="button" className="sv-secondary" aria-label={`Move ${teamName(i)} up`} disabled={busy || !connected || i === 0} onClick={() => setOrder(i, i - 1)}>Up</button><button type="button" className="sv-secondary" aria-label={`Move ${teamName(i)} down`} disabled={busy || !connected || i === state.order.length - 1} onClick={() => setOrder(i, i + 1)}>Down</button></div></li>)}</ol><div className="sv-start-actions"><button type="button" className="sv-primary" disabled={busy || !connected} onClick={() => beginDraft()}>{busy ? 'Starting…' : 'Go to draft · shuffle teams'}</button><button type="button" className="sv-secondary" disabled={busy || !connected} onClick={() => beginDraft(false)}>Go to draft · displayed order</button></div><p className="sv-order-hint">Starting locks in the joined teams and drafts all 20 contestants. You can reset after testing.</p></> : <p className="sv-order-hint">{loading ? 'Checking organizer access…' : <>Brian can set the order and start the draft. <Link href="/login">Organizer sign in</Link></>}</p>}</section>}
     {organizer && !state.started && <form className="sv-config" onSubmit={saveTeamCount}><label htmlFor="sv-count">Team limit</label><select id="sv-count" value={teamCountDraft} onChange={e => setTeamCountDraft(Number(e.target.value))}>{Array.from({length: MAX_TEAM_COUNT - MIN_TEAM_COUNT + 1}, (_, i) => i + MIN_TEAM_COUNT).map(n => <option key={n} value={n} disabled={n < state.uids.length}>{n} {n === 1 ? 'team' : 'teams'}</option>)}</select><button className="sv-secondary" disabled={busy || !connected || teamCountDraft === teamCount}>Save team limit</button><p>Choose your maximum before people join. “Go to draft” uses however many teams have joined, so two people can run a full test.</p></form>}
     {organizer && state.uids.length > 0 && <div className="sv-reset"><button type="button" className="sv-reset-button" disabled={busy || !connected} onClick={() => setConfirmReset(true)}>Reset draft</button><p>Clears every team and pick so everyone can start over.</p></div>}
-    <section className="sv-scores" aria-labelledby="sv-scores-heading"><div className="sv-score-heading"><div><h2 id="sv-scores-heading">Scoreboard</h2><p>Elimination order +5 jury · +10 final tribal · +20 winner</p></div>{organizer && <button type="button" className="sv-secondary" disabled={scoreBusy} onClick={updateScoring}>{scoreBusy ? 'Checking…' : 'Please update scoring'}</button>}</div>
+    <section className="sv-scores" aria-labelledby="sv-scores-heading"><div className="sv-score-heading"><div><h2 id="sv-scores-heading">Scoreboard</h2><p>Departure order +5 jury · +10 final tribal · +20 winner</p></div>{organizer && <button type="button" className="sv-secondary" disabled={scoreBusy} onClick={updateScoring}>{scoreBusy ? 'Checking…' : 'Please update scoring'}</button>}</div>
       {scoreNotice && <p className="sv-score-message" role="status">{scoreNotice}</p>}
       <ol>{state.order.map((uid, slot) => { const picks = state.picks.filter((_, i) => teamForPick(i, teamCount) === slot); const total = picks.reduce((sum, id) => sum + contestantPoints(id, scores), 0); return <li key={uid}><span>{teamName(slot)}</span><strong>{total} pts</strong><small>{picks.length ? picks.map(id => `${cast.find(c => c.id === id)?.name ?? id} ${contestantPoints(id, scores)}`).join(' · ') : 'No picks yet'}</small></li>; })}</ol>
       <p className="sv-score-foot">{scores.checkedAt ? `Last checked ${new Date(scores.checkedAt).toLocaleString()}.` : 'No result check yet.'} <a href={scores.sourceUrl} target="_blank" rel="noreferrer">Season results source</a>. Updates appear live for everyone; if the source is unclear, scores stay unchanged.</p>
