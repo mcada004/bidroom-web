@@ -2,6 +2,7 @@ import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebas
 import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, runTransaction } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { validateResults } from '../src/lib/survivor/scoring.ts';
 const env=await initializeTestEnvironment({projectId:'demo-survivor',firestore:{rules:readFileSync('firestore.rules','utf8'),host:'127.0.0.1',port:8188}});
 const clients=Array.from({length:5},(_,i)=>env.authenticatedContext(`u${i}`).firestore());
 const organizer=env.authenticatedContext('organizer',{email:'mcada004@gmail.com'}).firestore();
@@ -86,5 +87,20 @@ try {
  await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));
  await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),{...score,bootOrder:[ids[0]]}));
  await assertFails(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),score));
+ const legacyScore={...score,bootOrder:['ana-sani','patt-cannaday'],checkedAt:'2026-10-09T03:58:12.000Z'};
+ const freshScore={...score,bootOrder:['ana-sani','rob-antonson','patt-cannaday','jenna-doore','alexis-levine','linnea-capobianco']};
+ await env.withSecurityRulesDisabled(async context => {
+   await setDoc(doc(context.firestore(),'survivorScores','survivor-51-2026'),legacyScore);
+ });
+ await assertFails(setDoc(doc(clients[0],'survivorScores','survivor-51-2026'),freshScore));
+ await assertSucceeds(runTransaction(organizer,async transaction => {
+   const scoreRef=doc(organizer,'survivorScores','survivor-51-2026');
+   const snapshot=await transaction.get(scoreRef);
+   transaction.set(scoreRef,validateResults(freshScore,snapshot.data()));
+ }));
+ assert.deepEqual((await getDoc(doc(publicDb,'survivorScores','survivor-51-2026'))).data(),freshScore);
+ await assertSucceeds(setDoc(doc(organizer,'survivorScores','survivor-51-2026'),validateResults(freshScore,freshScore)));
+ assert.deepEqual((await getDoc(ref(publicDb))).data(),s);
+ console.log('PASS: legacy score migration saves through organizer transaction, is publicly readable and repeatable, denies guest writes, and preserves the completed draft.');
  console.log('PASS: guest access, organizer-only shuffle/start/reset, two-team full draft, four-team five-round snake order, duplicate/invalid picks, simultaneous picks, immutable history and completion.');
 } finally {await env.cleanup();}

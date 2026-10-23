@@ -20,7 +20,12 @@ export function validateResults(next: SeasonResults, previous: SeasonResults = e
   }
   if (next.bootOrder.length > 17 || next.finalists.length > 3 || (next.winner && !next.finalists.includes(next.winner))) throw new Error('Invalid season finish.');
   if (next.finalists.some(id => next.bootOrder.includes(id)) || next.jurors.some(id => !next.bootOrder.includes(id) && !next.finalists.includes(id))) throw new Error('Inconsistent jury or final result.');
-  if (next.bootOrder.length < previous.bootOrder.length || previous.bootOrder.some((id, i) => next.bootOrder[i] !== id)) throw new Error('Source changed an already scored elimination.');
+  // The original vote-only scorer saved Ana, Patt and omitted Rob's quit.
+  // Permit only that known correction; all other history remains append-only.
+  const correctsLegacyRobOmission = previous.bootOrder.length === 2 &&
+    previous.bootOrder[0] === 'ana-sani' && previous.bootOrder[1] === 'patt-cannaday' &&
+    next.bootOrder[0] === 'ana-sani' && next.bootOrder[1] === 'rob-antonson' && next.bootOrder[2] === 'patt-cannaday';
+  if (!correctsLegacyRobOmission && (next.bootOrder.length < previous.bootOrder.length || previous.bootOrder.some((id, i) => next.bootOrder[i] !== id))) throw new Error('Source changed an already scored elimination.');
   if (previous.jurors.some(id => !next.jurors.includes(id)) || previous.finalists.some(id => !next.finalists.includes(id)) || (previous.winner && previous.winner !== next.winner)) throw new Error('Source changed an already scored bonus.');
   return next;
 }
