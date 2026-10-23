@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import cast from '../lib/survivor/cast.json' with { type: 'json' };
 import { parseSurvivorResults } from './survivorResultsParser.ts';
-import { contestantPoints, validateResults } from '../lib/survivor/scoring.ts';
+import { contestantPoints, emptyResults, validateResults } from '../lib/survivor/scoring.ts';
 const aliases: Record<string,string> = { 'an-thien-an-nguyen':'Thien An Nguyen', 'danny-kilby-kilby':'Danny Kilby', 'angelica-jelly-loblack':'Angelica "Jelly" Loblack' };
 function row(name:string, finish='') { return `<tr><th scope="row"><span class="fn">${name}</span></th><td>30</td><td>Town</td><td>Tribe</td><td></td><td>${finish}</td><td>Day</td></tr>`; }
 function source(overrides:Record<string,string>={}) {
@@ -38,4 +38,24 @@ test('medical and voluntary departures count, but a future vote-out cannot reord
   const medical=parseSurvivorResults(orderedSource([['ana-sani','2nd voted out'],['rob-antonson','Medically evacuated'],['patt-cannaday','3rd voted out']]),now);
   assert.equal(contestantPoints('rob-antonson',medical),2);
   assert.throws(()=>parseSurvivorResults(orderedSource([['rob-antonson','Quit'],['ana-sani','3rd voted out']]),now));
+});
+test('refreshes the saved vote-only scores with Rob and subsequent departures', () => {
+  const previous = {
+    ...emptyResults(),
+    bootOrder: ['ana-sani', 'patt-cannaday'],
+    checkedAt: '2026-10-09T03:58:12.000Z',
+  };
+  const parsed = parseSurvivorResults(orderedSource([
+    ['ana-sani', '2nd voted out'],
+    ['rob-antonson', 'Quit'],
+    ['patt-cannaday', '3rd voted out'],
+    ['jenna-doore', '4th voted out'],
+    ['alexis-levine', '5th voted out'],
+    ['linnea-capobianco', '6th voted out'],
+  ]), '2026-10-23T01:00:00.000Z');
+  const updated = validateResults(parsed, previous);
+  assert.deepEqual(updated.bootOrder.map(id => contestantPoints(id, updated)), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(previous.bootOrder, ['ana-sani', 'patt-cannaday']);
+  assert.deepEqual(validateResults(updated, updated), updated);
+  assert.deepEqual(validateResults({ ...updated, bootOrder: [...updated.bootOrder, 'eric-macksoud'] }, updated).bootOrder.slice(-1), ['eric-macksoud']);
 });
