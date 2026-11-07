@@ -12,7 +12,13 @@ The organizer's “Please update scoring” button and the Saturday 9 p.m. Pacif
 
 Cast facts and photos checked September 29, 2026 against https://parade.com/tv/survivor-51-cast-2026. Aaliyah Puglia is excluded. Photos: Robert Voets/CBS, served by Parade. This is a fixed draft snapshot, not an automatic elimination feed.
 
-## Release prerequisite
+## Maximum team totals
+
+Both `/survivor` and `/survivor/summary` show three team-level ceilings using the saved scores and live draft rosters. Actual earned points stay fixed; only players not listed as departed or finalized receive projected points. Each remaining player takes a distinct best finish. The jury-only scenario starts at fourth, final tribal without a winner starts at second, and the winner scenario starts at first. Remaining non-finalists are assumed to make the jury. First through fifth are worth 55, 34, 33, 22, and 21 points under the existing additive rules, so three players left can add at most 122, four can add 144, and one can add 55. These are alternative outcomes, not cumulative columns or predictions.
+
+A scenario displays a dash if there are not enough unoccupied finishing places left. With no remaining players, every column shows the earned final score. An expandable breakdown lists remaining castaways and each scenario's arithmetic without predicting which named player takes which place. Loading/errors and the saved result timestamp are shown so unreceived data is not presented as a current projection. This feature only reads existing data; no database schema, permission or scoring-sync changes are needed.
+
+## Release prerequisite for draft-rule changes
 
 Publish the updated `/survivorDrafts/{draftId}` rule in Firebase project `bidroom-web` before merging the website changes. Compare live rules first and preserve unrelated differences. GitHub/Vercel publication does not deploy Firestore rules.
 
