@@ -5,6 +5,29 @@
 .sv-start-actions{display:flex;gap:10px;flex-wrap:wrap}.sv-start-actions button{min-height:44px}.sv-scores{background:#183b37;border:1px solid #537b70;border-radius:14px;padding:20px;margin:20px 0}.sv-score-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}.sv-score-heading h2{font-size:24px;margin:0 0 4px}.sv-score-heading p,.sv-score-foot,.sv-score-message{margin:0;color:#c4d6d0;font-size:14px}.sv-score-heading button{flex-shrink:0}.sv-scores ol{list-style:none;padding:0;margin:16px 0}.sv-scores li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 0;border-bottom:1px solid #49695e}.sv-scores li span{font-weight:700}.sv-scores li small{grid-column:1/-1;color:#c4d6d0;overflow-wrap:anywhere}.sv-score-message{margin:12px 0}.sv-score-foot a{color:#fbd46c;text-decoration:underline;text-underline-offset:3px}@media(max-width:650px){.sv-scores{padding:16px}.sv-score-heading{align-items:stretch;flex-direction:column}.sv-score-heading button,.sv-start-actions button{width:100%}}
 
 .sv-heading-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sv-potential{background:#183b37;border:1px solid #537b70;border-radius:14px;padding:20px;margin:20px 0}
+.sv-potential h2{font-size:24px;line-height:1.25;font-weight:700;margin:0 0 10px}
+.sv-potential-intro{max-width:750px;color:#c4d6d0;font-size:15px;margin:0 0 20px}
+.sv-potential-table{border-collapse:collapse;table-layout:fixed;width:100%;font-variant-numeric:tabular-nums}
+.sv-potential-table th,.sv-potential-table td{padding:13px 10px;border-bottom:1px solid #49695e;text-align:center;vertical-align:middle;overflow-wrap:anywhere}
+.sv-potential-table th:first-child{width:40%;text-align:left;padding-left:0}
+.sv-potential-table thead th{font-size:14px;color:#c4d6d0;font-weight:700;padding-top:0}
+.sv-potential-table tbody th{font-size:15px;font-weight:400}
+.sv-potential-table td strong{display:block;font-size:23px;line-height:1.2}
+.sv-potential-table small{display:block;font-size:12px;line-height:1.4;color:#b2ccc4;margin-top:5px;font-weight:400}
+.sv-potential-table .sv-potential-win{color:#fbbf24;background:#fbbf2408}
+.sv-potential-note,.sv-potential-source{color:#c4d6d0;font-size:13px;line-height:1.5;margin:16px 0 0}
+.sv-potential-source{color:#b2ccc4}
+.sv-potential-details{border-top:1px solid #49695e;margin-top:16px;font-size:14px;color:#c4d6d0}
+.sv-potential-details summary{padding:14px 0;min-height:46px;font-weight:700;cursor:pointer;color:#f4faf6}
+.sv-potential-details summary:focus-visible{outline:3px solid #fbbf24;outline-offset:4px}
+.sv-potential-details p{margin:0 0 12px}
+.sv-potential-team-detail{padding:14px 0;border-top:1px solid #36524f}
+.sv-potential-team-detail h3{font-size:16px;color:#f4faf6;font-weight:700;margin:0 0 6px;overflow-wrap:anywhere}
+.sv-potential-team-detail dl{margin:0}.sv-potential-team-detail dl>div{display:grid;grid-template-columns:95px minmax(0,1fr);gap:10px;margin:6px 0}
+.sv-potential-team-detail dt{font-weight:700}.sv-potential-team-detail dd{margin:0;overflow-wrap:anywhere}
+.sv-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:650px){.sv-potential{padding:16px 12px}.sv-potential-intro{font-size:14px}.sv-potential-table th,.sv-potential-table td{padding:12px 5px}.sv-potential-table th:first-child{width:37%}.sv-potential-table thead th{font-size:12px}.sv-potential-table tbody th{font-size:13px}.sv-potential-table td strong{font-size:20px}.sv-potential-table small{font-size:11px}.sv-potential-team-detail dl>div{grid-template-columns:80px minmax(0,1fr)}}
 .sv-heading a.sv-secondary,.sv-summary a.sv-secondary{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:700;border-radius:10px;min-height:46px;padding:10px 16px}
 .sv-config{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px;background:#20443e;border:1px solid #537b70;border-radius:14px;margin:20px 0}
 .sv-config label{font-weight:700}.sv-config select{font:inherit;background:#0d211f;color:#fff;border:1px solid #73968b;border-radius:10px;padding:10px;min-height:46px}.sv-config p{flex-basis:100%;font-size:14px;color:#c4d6d0;margin:0}

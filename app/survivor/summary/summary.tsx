@@ -5,15 +5,23 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { emptyDraft, normalizeDraft, PICK_COUNT, SURVIVOR_ROOM, teamForPick, type DraftState } from '@/src/lib/survivor/draft';
 import cast from '@/src/lib/survivor/cast.json';
+import { emptyResults, SCORE_ROOM, type SeasonResults } from '@/src/lib/survivor/scoring';
+import TeamPotential, { type ScoreLoadState } from '../team-potential';
 
 const colors = ['#fbbf24', '#6ee7b7', '#93c5fd', '#f9a8d4', '#c4b5fd'];
 export default function SurvivorSummary() {
   const [state, setState] = useState<DraftState>(emptyDraft);
   const [status, setStatus] = useState('Connecting to the live draft…');
+  const [scores, setScores] = useState<SeasonResults>(emptyResults);
+  const [scoreStatus, setScoreStatus] = useState<ScoreLoadState>('loading');
   useEffect(() => onSnapshot(doc(db, 'survivorDrafts', SURVIVOR_ROOM), { includeMetadataChanges: true }, snapshot => {
     setState(snapshot.exists() ? normalizeDraft(snapshot.data() as DraftState) : emptyDraft());
     setStatus(snapshot.metadata.fromCache ? 'Reconnecting…' : 'Live updates');
   }, () => setStatus('Unable to connect. Reload to try again.')), []);
+  useEffect(() => onSnapshot(doc(db, 'survivorScores', SCORE_ROOM), snapshot => {
+    setScores(snapshot.exists() ? snapshot.data() as SeasonResults : emptyResults());
+    setScoreStatus('ready');
+  }, () => setScoreStatus('error')), []);
   const count = state.teamCount;
   const drafted = new Set(state.picks);
   const remaining = cast.filter(c => !drafted.has(c.id));
@@ -21,6 +29,7 @@ export default function SurvivorSummary() {
   return <main className="sv-page sv-summary">
     <header className="sv-heading"><div><p className="sv-eyebrow">BIDROOM / FANTASY DRAFT</p><h1>DRAFT <span>SUMMARY</span></h1><p className="sv-subtitle">Survivor 51 · {state.picks.length} of {PICK_COUNT} picked · {remaining.length} remaining</p></div><Link className="sv-secondary" href="/survivor">Back to draft</Link></header>
     <section className="sv-status" aria-live="polite"><div><p className="sv-eyebrow">{status}</p><h2>{state.started ? state.picks.length === PICK_COUNT ? 'Draft complete' : 'The draft is underway' : 'Waiting for the draft'}</h2><p>Teams and available castaways update as picks are saved.</p></div><span className="sv-connection">{state.uids.length} of {count} teams</span></section>
+    <TeamPotential draft={state} scores={scores} scoreStatus={scoreStatus} />
     <section aria-labelledby="sv-summary-teams"><div className="sv-board-title"><h2 id="sv-summary-teams">Teams and picks</h2></div>
       <div className="sv-summary-teams">{Array.from({length:count},(_,slot) => {
         const picks = state.picks.map((id,index) => ({id,index})).filter(p => teamForPick(p.index,count) === slot);

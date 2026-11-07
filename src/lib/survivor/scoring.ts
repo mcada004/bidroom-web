@@ -2,6 +2,13 @@ import cast from './cast.json' with { type: 'json' };
 
 export const SCORE_ROOM = 'survivor-51-2026';
 export const SCORE_SOURCE = 'https://en.wikipedia.org/wiki/Survivor_51';
+export const SCORING_RULES = {
+  castaways: cast.length,
+  finalists: 3,
+  juryBonus: 5,
+  finalTribalBonus: 10,
+  winnerBonus: 20,
+} as const;
 export type SeasonResults = {
   bootOrder: string[];
   jurors: string[];
@@ -33,6 +40,6 @@ export function validateResults(next: SeasonResults, previous: SeasonResults = e
 export function contestantPoints(id: string, results: SeasonResults) {
   const boot = results.bootOrder.indexOf(id);
   const final = results.finalists.indexOf(id);
-  const placement = boot >= 0 ? boot + 1 : final >= 0 && results.finalists.length === 3 ? 18 + final : 0;
-  return placement + (results.jurors.includes(id) || final >= 0 ? 5 : 0) + (final >= 0 ? 10 : 0) + (results.winner === id ? 20 : 0);
+  const placement = boot >= 0 ? boot + 1 : final >= 0 && results.finalists.length === SCORING_RULES.finalists ? SCORING_RULES.castaways - SCORING_RULES.finalists + 1 + final : 0;
+  return placement + (results.jurors.includes(id) || final >= 0 ? SCORING_RULES.juryBonus : 0) + (final >= 0 ? SCORING_RULES.finalTribalBonus : 0) + (results.winner === id ? SCORING_RULES.winnerBonus : 0);
 }
