@@ -12,6 +12,8 @@ The organizer's “Please update scoring” button and the Saturday 9 p.m. Pacif
 
 Cast facts and photos checked September 29, 2026 against https://parade.com/tv/survivor-51-cast-2026. Aaliyah Puglia is excluded. Photos: Robert Voets/CBS, served by Parade. This is a fixed draft snapshot, not an automatic elimination feed.
 
+Shared contestant-table cells (for example, “9th & 10th voted out” spanning two rows) apply to every castaway in the shared group. Each player receives the next departure-order score in the source table's order, plus the applicable bonus. The shared vote numbers must be consecutive and match the number of spanned rows; malformed or conflicting groups still fail without changing scores. A later “Withdrew from jury” label preserves the bonus already earned by reaching the jury. The November 11 double elimination and Brady's changed jury label are covered by a reduced source-table regression fixture.
+
 ## Maximum team totals
 
 Both `/survivor` and `/survivor/summary` show three team-level ceilings using the saved scores and live draft rosters. Actual earned points stay fixed; only players not listed as departed or finalized receive projected points. Each remaining player takes a distinct best finish. The jury-only scenario starts at fourth, final tribal without a winner starts at second, and the winner scenario starts at first. Remaining non-finalists are assumed to make the jury. First through fifth are worth 55, 34, 33, 22, and 21 points under the existing additive rules, so three players left can add at most 122, four can add 144, and one can add 55. These are alternative outcomes, not cumulative columns or predictions.
