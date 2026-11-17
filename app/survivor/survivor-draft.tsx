@@ -9,6 +9,7 @@ import { addPick, addTeam, emptyDraft, normalizeDraft, setTeamCount, moveTeam, s
 import { contestantPoints, emptyResults, SCORE_ROOM, validateResults, type SeasonResults } from '@/src/lib/survivor/scoring';
 import cast from '@/src/lib/survivor/cast.json';
 import TeamPotential, { type ScoreLoadState } from './team-potential';
+import ServiceBanner from './service-banner';
 const colors = ['#fbbf24', '#6ee7b7', '#93c5fd', '#f9a8d4', '#c4b5fd'];
 export default function SurvivorDraft() {
   const { user, loading } = useAuth();
@@ -172,6 +173,7 @@ export default function SurvivorDraft() {
   const chosen = cast.find(c => c.id === selection?.id);
   return <main className="sv-page">
     <header className="sv-heading"><div><p className="sv-eyebrow">BIDROOM / FANTASY DRAFT</p><h1>SURVIVOR <span>51</span></h1><p className="sv-subtitle">{teamCount} teams <span>·</span> {PICK_COUNT} castaways <span>·</span> {Math.ceil(PICK_COUNT / teamCount)} rounds</p></div><div className="sv-heading-actions"><Link className="sv-secondary" href="/survivor/summary">Draft summary</Link><button className="sv-secondary" onClick={share}>Share draft</button></div></header>
+    <ServiceBanner />
     <section className={`sv-status ${myTurn ? 'sv-your-turn' : ''}`} aria-live="polite">
       <div><p className="sv-eyebrow">{finished ? 'ALL TEAMS ARE SET' : live ? `ROUND ${Math.floor(state.picks.length / teamCount) + 1} · PICK ${state.picks.length + 1} OF ${PICK_COUNT}` : 'DRAFT LOBBY'}</p>
       <h2>{!ready ? 'Connecting to the draft…' : finished ? 'The tribe has spoken.' : live ? !state.order[currentTeam] ? `Waiting for team ${currentTeam + 1} to join` : myTurn ? 'You’re on the clock.' : `${teamName(currentTeam)} is on the clock.` : state.uids.length === teamCount ? 'Ready for the organizer to start' : `${state.uids.length} of ${teamCount} teams ready`}</h2>
