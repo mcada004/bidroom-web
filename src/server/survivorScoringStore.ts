@@ -1,3 +1,5 @@
+import { unstable_cache } from 'next/cache';
+import verified from '@/src/lib/survivor/verified-results.json';
 import { fromFirestoreValue, toFirestoreValue } from '@/src/server/firestoreRest';
 import { getFirestoreProjectId, getFirestoreServiceAccessToken } from '@/src/server/firestoreServiceAccount';
 import { emptyResults, SCORE_ROOM, SCORE_SOURCE, validateResults, type SeasonResults } from '@/src/lib/survivor/scoring';
@@ -31,5 +33,11 @@ export async function fetchSurvivorSourceResults() {
   const source = await fetch(SCORE_SOURCE, { headers: { 'User-Agent': 'Bidroom Survivor 51 scoring/1.0 (fan draft)', Accept: 'text/html' }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
   if (!source.ok) throw new Error(`Season source returned HTTP ${source.status}. Scores were not changed.`);
   const checkedAt = new Date().toISOString();
-  return parseSurvivorResults(await source.text(), checkedAt);
+  return validateResults(parseSurvivorResults(await source.text(), checkedAt), verified);
 }
+
+// Cache only successfully parsed results. Failed background refreshes retain
+// the last good value; a cold cache returns an error rather than a fresh zero.
+export const getCachedSurvivorResults = unstable_cache(
+  fetchSurvivorSourceResults, ['survivor-51-validated-results-v1'], { revalidate: 300 },
+);

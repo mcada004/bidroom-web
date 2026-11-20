@@ -5,18 +5,11 @@
 .sv-start-actions{display:flex;gap:10px;flex-wrap:wrap}.sv-start-actions button{min-height:44px}.sv-scores{background:#183b37;border:1px solid #537b70;border-radius:14px;padding:20px;margin:20px 0}.sv-score-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}.sv-score-heading h2{font-size:24px;margin:0 0 4px}.sv-score-heading p,.sv-score-foot,.sv-score-message{margin:0;color:#c4d6d0;font-size:14px}.sv-score-heading button{flex-shrink:0}.sv-scores ol{list-style:none;padding:0;margin:16px 0}.sv-scores li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 0;border-bottom:1px solid #49695e}.sv-scores li span{font-weight:700}.sv-scores li small{grid-column:1/-1;color:#c4d6d0;overflow-wrap:anywhere}.sv-score-message{margin:12px 0}.sv-score-foot a{color:#fbd46c;text-decoration:underline;text-underline-offset:3px}@media(max-width:650px){.sv-scores{padding:16px}.sv-score-heading{align-items:stretch;flex-direction:column}.sv-score-heading button,.sv-start-actions button{width:100%}}
 
 .sv-heading-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.sv-service-banner{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:16px;background:#fbbf240b;border:1px solid #fbbf2460;border-radius:12px;padding:8px 10px 8px 16px;margin:0 0 24px}
-.sv-service-badge{display:flex;flex-direction:column;gap:3px;white-space:nowrap}.sv-service-badge strong{display:flex;align-items:center;gap:7px;color:#fbd46c;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.sv-service-badge time{color:#b2ccc4;font-size:11px;letter-spacing:.02em}
-.sv-service-dot{width:6px;height:6px;border-radius:50%;background:#6ee7b7;flex-shrink:0}
-.sv-service-window{overflow:hidden;min-width:0;mask-image:linear-gradient(to right,transparent,#000 12px,#000 calc(100% - 12px),transparent)}
-.sv-service-track{display:flex;width:max-content;animation:sv-service-scroll 65s linear infinite}
-.sv-service-copy{flex:none;white-space:nowrap;color:#e3eee7;font-size:14px;line-height:1.6}.sv-service-separator{display:inline-block;padding:0 28px;color:#fbbf24}
-.sv-page .sv-service-toggle{display:grid;place-items:center;width:44px;min-height:44px;padding:10px;color:#fbd46c;background:transparent;border:1px solid #fbbf2440;border-radius:8px}.sv-page .sv-service-toggle:hover{background:#fbbf2414}
-.sv-service-banner[data-paused="true"] .sv-service-track{animation-play-state:paused}
-@keyframes sv-service-scroll{to{transform:translateX(-50%)}}
-@media(hover:hover){.sv-service-window:hover .sv-service-track{animation-play-state:paused}}
-@media(max-width:650px){.sv-service-banner{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px 12px 12px}.sv-service-badge{flex-direction:row;align-items:center;justify-content:space-between;gap:12px}.sv-service-window{grid-column:1/-1;grid-row:2}.sv-service-toggle{grid-column:2;grid-row:1}.sv-service-copy{font-size:13px}}
-@media(prefers-reduced-motion:reduce){.sv-service-track{animation:none;display:block;width:auto}.sv-service-copy{display:block;white-space:normal}.sv-service-copy:last-child,.sv-service-separator,.sv-page .sv-service-toggle{display:none}.sv-service-window{mask-image:none}.sv-service-banner{grid-template-columns:auto minmax(0,1fr)}@media(max-width:650px){.sv-service-banner{grid-template-columns:minmax(0,1fr)}}}
+/* The bulletin is static, with one local dismissal per edition. */
+.sv-service-banner{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;background:#571c26;color:#fff1f2;border:1px solid #b44a56;border-left:4px solid #fb7185;border-radius:10px;padding:12px 14px;margin:0 0 20px}
+.sv-service-banner strong{color:#fecdd3;font-size:.85rem}.sv-service-banner p{margin:4px 0 0;font-size:14px;line-height:1.5}
+.sv-service-banner button{flex:none;background:transparent;color:white;border:1px solid #de8895;border-radius:8px;min-height:44px;padding:0 10px;cursor:pointer}
+.sv-service-banner button:focus-visible{outline:2px solid white;outline-offset:2px}
 .sv-potential{background:#183b37;border:1px solid #537b70;border-radius:14px;padding:20px;margin:20px 0}
 .sv-potential h2{font-size:24px;line-height:1.25;font-weight:700;margin:0 0 10px}
 .sv-potential-intro{max-width:750px;color:#c4d6d0;font-size:15px;margin:0 0 20px}

@@ -8,7 +8,8 @@ import { useAuth } from '@/src/context/AuthContext';
 import { addPick, addTeam, emptyDraft, normalizeDraft, setTeamCount, moveTeam, shuffleOrder, startDraft, SURVIVOR_ROOM, DEFAULT_TEAM_COUNT, MIN_TEAM_COUNT, MAX_TEAM_COUNT, PICK_COUNT, teamForPick, type DraftState } from '@/src/lib/survivor/draft';
 import { contestantPoints, emptyResults, SCORE_ROOM, validateResults, type SeasonResults } from '@/src/lib/survivor/scoring';
 import cast from '@/src/lib/survivor/cast.json';
-import TeamPotential, { type ScoreLoadState } from './team-potential';
+import { useSurvivorResults } from './use-survivor-results';
+import TeamPotential from './team-potential';
 import ServiceBanner from './service-banner';
 const colors = ['#fbbf24', '#6ee7b7', '#93c5fd', '#f9a8d4', '#c4b5fd'];
 export default function SurvivorDraft() {
@@ -21,8 +22,7 @@ export default function SurvivorDraft() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [scores, setScores] = useState<SeasonResults>(emptyResults);
-  const [scoreStatus, setScoreStatus] = useState<ScoreLoadState>('loading');
+  const { scores, refreshFailed } = useSurvivorResults();
   const [scoreBusy, setScoreBusy] = useState(false);
   const [scoreNotice, setScoreNotice] = useState('');
   const [teamCountDraft, setTeamCountDraft] = useState(DEFAULT_TEAM_COUNT);
@@ -38,10 +38,6 @@ export default function SurvivorDraft() {
       setReady(true); setConnected(!snapshot.metadata.fromCache);
     }, () => { setConnected(false); setReady(true); setError('Could not connect to the shared draft. Please retry.'); });
   }, [retry]);
-  useEffect(() => onSnapshot(doc(db, 'survivorScores', SCORE_ROOM), snapshot => {
-    setScores(snapshot.exists() ? snapshot.data() as SeasonResults : emptyResults());
-    setScoreStatus('ready');
-  }, () => { setScoreStatus('error'); setScoreNotice('The scoreboard is temporarily unavailable.'); }), []);
   useEffect(() => { if (selection) dialog.current?.showModal(); else dialog.current?.close(); }, [selection]);
   useEffect(() => { if (confirmReset) resetDialog.current?.showModal(); else resetDialog.current?.close(); }, [confirmReset]);
   const organizer = user?.email?.toLowerCase() === 'mcada004@gmail.com';
@@ -172,8 +168,8 @@ export default function SurvivorDraft() {
   }
   const chosen = cast.find(c => c.id === selection?.id);
   return <main className="sv-page">
-    <header className="sv-heading"><div><p className="sv-eyebrow">BIDROOM / FANTASY DRAFT</p><h1>SURVIVOR <span>51</span></h1><p className="sv-subtitle">{teamCount} teams <span>·</span> {PICK_COUNT} castaways <span>·</span> {Math.ceil(PICK_COUNT / teamCount)} rounds</p></div><div className="sv-heading-actions"><Link className="sv-secondary" href="/survivor/summary">Draft summary</Link><button className="sv-secondary" onClick={share}>Share draft</button></div></header>
     <ServiceBanner />
+    <header className="sv-heading"><div><p className="sv-eyebrow">BIDROOM / FANTASY DRAFT</p><h1>SURVIVOR <span>51</span></h1><p className="sv-subtitle">{teamCount} teams <span>·</span> {PICK_COUNT} castaways <span>·</span> {Math.ceil(PICK_COUNT / teamCount)} rounds</p></div><div className="sv-heading-actions"><Link className="sv-secondary" href="/survivor/summary">Draft summary</Link><button className="sv-secondary" onClick={share}>Share draft</button></div></header>
     <section className={`sv-status ${myTurn ? 'sv-your-turn' : ''}`} aria-live="polite">
       <div><p className="sv-eyebrow">{finished ? 'ALL TEAMS ARE SET' : live ? `ROUND ${Math.floor(state.picks.length / teamCount) + 1} · PICK ${state.picks.length + 1} OF ${PICK_COUNT}` : 'DRAFT LOBBY'}</p>
       <h2>{!ready ? 'Connecting to the draft…' : finished ? 'The tribe has spoken.' : live ? !state.order[currentTeam] ? `Waiting for team ${currentTeam + 1} to join` : myTurn ? 'You’re on the clock.' : `${teamName(currentTeam)} is on the clock.` : state.uids.length === teamCount ? 'Ready for the organizer to start' : `${state.uids.length} of ${teamCount} teams ready`}</h2>
@@ -190,9 +186,9 @@ export default function SurvivorDraft() {
     <section className="sv-scores" aria-labelledby="sv-scores-heading"><div className="sv-score-heading"><div><h2 id="sv-scores-heading">Scoreboard</h2><p>Departure order +5 jury · +10 final tribal · +20 winner</p></div>{organizer && <button type="button" className="sv-secondary" disabled={scoreBusy} onClick={updateScoring}>{scoreBusy ? 'Checking…' : 'Please update scoring'}</button>}</div>
       {scoreNotice && <p className="sv-score-message" role="status">{scoreNotice}</p>}
       <ol>{state.order.map((uid, slot) => { const picks = state.picks.filter((_, i) => teamForPick(i, teamCount) === slot); const total = picks.reduce((sum, id) => sum + contestantPoints(id, scores), 0); return <li key={uid}><span>{teamName(slot)}</span><strong>{total} pts</strong><small>{picks.length ? picks.map(id => `${cast.find(c => c.id === id)?.name ?? id} ${contestantPoints(id, scores)}`).join(' · ') : 'No picks yet'}</small></li>; })}</ol>
-      <p className="sv-score-foot">{scores.checkedAt ? `Last checked ${new Date(scores.checkedAt).toLocaleString()}.` : 'No result check yet.'} <a href={scores.sourceUrl} target="_blank" rel="noreferrer">Season results source</a>. Updates appear live for everyone; if the source is unclear, scores stay unchanged.</p>
+      <p className="sv-score-foot">{scores.checkedAt ? `Last checked ${new Date(scores.checkedAt).toLocaleString()}.` : 'No result check yet.'} <a href={scores.sourceUrl} target="_blank" rel="noreferrer">Season results source</a>. {refreshFailed ? 'Showing the last verified scores. We’ll retry automatically.' : 'Checks automatically while the board is open.'}</p>
     </section>
-    <TeamPotential draft={state} scores={scores} scoreStatus={scoreStatus} />
+    <TeamPotential draft={state} scores={scores} refreshFailed={refreshFailed} />
     <section className="sv-teams" aria-label="Teams and rosters">{Array.from({ length: teamCount }, (_, i) => <div key={i} className={`sv-team ${live && currentTeam === i ? 'sv-active' : ''}`} style={{ '--team-color': colors[i] } as React.CSSProperties}><div className="sv-team-title"><span className="sv-team-number">{i + 1}</span><h3>{teamName(i)} {myTeam === i && <small>YOU</small>}</h3><span>{state.picks.filter((_, p) => teamForPick(p, teamCount) === i).length}/{Math.ceil((PICK_COUNT - i) / teamCount)}</span></div><ul>{state.picks.map((id, p) => teamForPick(p, teamCount) === i ? <li key={id}><span>#{p + 1}</span>{cast.find(c => c.id === id)?.name}</li> : null)}{!state.picks.some((_, p) => teamForPick(p, teamCount) === i) && <li className="sv-empty">{state.order[i] ? 'Waiting for first pick' : 'Waiting for a team'}</li>}</ul></div>)}</section>
     <div className="sv-board-title"><h2>The castaways</h2><span>{PICK_COUNT - state.picks.length} available</span></div>
     <div className="sv-grid">{cast.map(c => {

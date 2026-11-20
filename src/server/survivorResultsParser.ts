@@ -27,7 +27,7 @@ function* resultRows(rows: string[]) {
       const span = attributes.match(/\browspan\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
       const rowSpan = span ? Number(span[1] ?? span[2] ?? span[3]) : 1;
       if (!Number.isInteger(rowSpan) || rowSpan < 1 || rowSpan > cast.length + 1) throw new Error('Invalid season table row span.');
-      return { text: plain(html), rowSpan, offset: 0 };
+      return { text: plain(html.replace(/<sup\b[^>]*>[\s\S]*?<\/sup>/gi, '')), rowSpan, offset: 0 };
     });
     const cells = [...inherited, ...own];
     inherited = cells.filter(cell => cell.offset + 1 < cell.rowSpan).map(cell => ({ ...cell, offset: cell.offset + 1 }));
@@ -63,11 +63,22 @@ export function parseSurvivorResults(html: string, checkedAt: string): SeasonRes
     if (!id) continue;
     const finishCells = cells.filter(cell => finishPattern.test(cell.text));
     const finish = finishCells.map(cell => cell.text).join(' ');
-    if (!finish) continue;
+    if (!finish) {
+      if (cells.some(cell => /^Day\s+\d+$/i.test(cell.text))) throw new Error(`Missing or unknown finish for ${name}.`);
+      continue;
+    }
     // Joining the jury earns the bonus, even if a juror later withdraws.
     const earnedJury = /jury member|juror|(?:withdrew|withdrawn) from (?:the )?jury/i.test(finish);
     const voteCells = finishCells.filter(cell => /\b(?:voted out|eliminated)\b/i.test(cell.text));
-    if (voteCells.length) {
+    // A bare “Eliminated” is an exit without a vote (e.g. the coin flip).
+    // A jury ordinal in that cell is not a vote number. Require a single,
+    // explicit placement; malformed numbered/shared votes still fail closed.
+    const unnumberedExit = voteCells.length === 1 && voteCells[0].rowSpan === 1 &&
+      /^eliminated(?:\s+\d+(?:st|nd|rd|th)\s+(?:jury member|juror))?$/i.test(voteCells[0].text);
+    if (unnumberedExit) {
+      departures.push(id);
+      if (earnedJury) jurors.push(id);
+    } else if (voteCells.length) {
       if (voteCells.length !== 1) throw new Error(`Conflicting vote-out results for ${name}.`);
       const cell = voteCells[0];
       const voteOut = cell.text.match(/\b(\d{1,2}(?:st|nd|rd|th)(?:\s*(?:&|and|,)\s*\d{1,2}(?:st|nd|rd|th))*)\s+(?:voted out|eliminated)\b/i);

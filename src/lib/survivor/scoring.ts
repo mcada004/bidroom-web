@@ -37,6 +37,21 @@ export function validateResults(next: SeasonResults, previous: SeasonResults = e
   return next;
 }
 
+// Independent sources can arrive in either order. Ignore a stale snapshot
+// even when its request completed more recently.
+export function advanceResults(previous: SeasonResults, candidate: SeasonResults): SeasonResults {
+  try {
+    const next = validateResults(candidate, previous);
+    if (next.finalists.length && (next.bootOrder.length !== 17 || next.finalists.length !== 3 ||
+        next.winner !== next.finalists[2])) return previous;
+    if (previous.finalists.some((id, i) => next.finalists[i] !== id)) return previous;
+    if (Date.parse(next.checkedAt) < Date.parse(previous.checkedAt) &&
+        next.bootOrder.length === previous.bootOrder.length && next.jurors.length === previous.jurors.length &&
+        next.finalists.length === previous.finalists.length && next.winner === previous.winner) return previous;
+    return next;
+  } catch { return previous; }
+}
+
 export function contestantPoints(id: string, results: SeasonResults) {
   const boot = results.bootOrder.indexOf(id);
   const final = results.finalists.indexOf(id);

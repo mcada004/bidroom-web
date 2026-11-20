@@ -5,6 +5,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/survivor/scoring/latest",
+      "schedule": "15 7 * * *"
+    },
+    {
       "path": "/api/survivor/scoring/sync",
       "schedule": "0 4 * * 0"
     },
