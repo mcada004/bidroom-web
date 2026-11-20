@@ -67,7 +67,7 @@ export default function TeamPotential({ draft, scores, refreshFailed }: {
           </div>)}
           <p>These are independent ceilings for each team. Different teams cannot all claim the same top places. A dash means that scenario is no longer possible.</p>
         </details>
-        <p className="sv-potential-source">{checkedAt ? `Based on verified results checked ${checkedAt} PT. ${refreshFailed ? 'Showing the last verified results until the next successful check.' : 'Maximums recalculate when scores update.'}` : 'No season results have been saved yet. These maximums assume every drafted player is still in the game.'}</p>
+        <p className="sv-potential-source">{checkedAt ? `Based on verified results checked ${checkedAt} PT. ${refreshFailed ? 'Showing the last verified results until the next successful check.' : 'Maximums follow the Sunday 9 a.m. Pacific release or an earlier organizer update.'}` : 'No season results have been saved yet. These maximums assume every drafted player is still in the game.'}</p>
       </>}
   </section>;
 }
