@@ -108,3 +108,20 @@ test('a changed jury label preserves the earned bonus without accepting its sile
   const missing = parseSurvivorResults(orderedSource([['ana-sani', '2nd voted out']]), now);
   assert.throws(() => validateResults(missing, original), /already scored bonus/);
 });
+
+test('the coin-flip exit earns placement and jury points without consuming the next vote', () => {
+  const prior = parseSurvivorResults(sharedFinishSource, '2026-11-13T04:00:00Z');
+  const lewis = '<tr><th scope="row">Lewis Kelly</th><td></td><td></td></tr>';
+  const christian = '<tr><th scope="row">Cristian Chavez</th><td></td><td></td></tr>';
+  const html = sharedFinishSource.replace(lewis, '').replace(christian,
+    '<tr><th scope="row">Lewis Kelly</th><td>Eliminated<sup>[b]</sup><br>3rd jury member</td><td>Day 17</td></tr>' + christian);
+  const next = validateResults(parseSurvivorResults(html, '2026-11-19T04:00:00Z'), prior);
+  assert.deepEqual(next.bootOrder, [...prior.bootOrder, 'lewis-kelly']);
+  assert.deepEqual(next.jurors, [...prior.jurors, 'lewis-kelly']);
+  assert.equal(contestantPoints('lewis-kelly', next), 16);
+  const following = html.replace(christian, row('Cristian Chavez', '11th voted out / 4th jury member'));
+  assert.equal(validateResults(parseSurvivorResults(following, '2026-11-26T04:00:00Z'), next).bootOrder.at(-1), 'cristian-chavez');
+  assert.throws(() => parseSurvivorResults(following.replace('11th voted', '12th voted'), next.checkedAt));
+  assert.throws(() => parseSurvivorResults(html.replace('Eliminated<sup>[b]</sup><br>3rd jury member','Unknown'), next.checkedAt));
+  assert.deepEqual(teamPotential(['lewis-kelly'], next).remainingIds, []);
+});

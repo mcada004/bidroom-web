@@ -28,3 +28,13 @@ test('the legacy correction cannot reorder, drop, or insert other scored departu
   assert.throws(() => validateResults(corrected, { ...previous, jurors: ['patt-cannaday'] }), /already scored bonus/);
   assert.throws(() => validateResults({ ...corrected, bootOrder: [...corrected.bootOrder, 'rob-antonson'] }, previous), /repeated castaway/);
 });
+
+test('a late stale feed or database response cannot replace verified standings', async () => {
+  const { advanceResults } = await import('./scoring.ts');
+  const last = { ...emptyResults(), bootOrder:['ana-sani'], checkedAt:'2026-11-13T00:00:00Z' };
+  const next = { ...last, bootOrder:[...last.bootOrder,'rob-antonson'], checkedAt:'2026-11-20T00:00:00Z' };
+  assert.deepEqual(advanceResults(last, next), next);
+  assert.deepEqual(advanceResults(next, {...last, checkedAt:'2026-11-21T00:00:00Z'}), next);
+  assert.deepEqual(advanceResults(next, {...next, checkedAt:last.checkedAt}), next);
+  assert.deepEqual(advanceResults(next, {...next, bootOrder:['rob-antonson','ana-sani']}), next);
+});

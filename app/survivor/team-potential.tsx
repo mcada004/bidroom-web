@@ -3,7 +3,6 @@ import { teamPotential, type TeamScenario } from '@/src/lib/survivor/potential';
 import { type SeasonResults } from '@/src/lib/survivor/scoring';
 import cast from '@/src/lib/survivor/cast.json';
 
-export type ScoreLoadState = 'loading' | 'ready' | 'error';
 const scenarios = [
   { key: 'juryOnly', label: 'Jury only' },
   { key: 'finalTribal', label: 'Final tribal' },
@@ -21,10 +20,10 @@ function finishRange(scenario: TeamScenario) {
   return scenario.finishes.length === 1 ? first : `${first}–${ordinal(scenario.finishes[scenario.finishes.length - 1].place)}`;
 }
 
-export default function TeamPotential({ draft, scores, scoreStatus }: {
+export default function TeamPotential({ draft, scores, refreshFailed }: {
   draft: DraftState;
   scores: SeasonResults;
-  scoreStatus: ScoreLoadState;
+  refreshFailed: boolean;
 }) {
   const teams = draft.order.map((uid, slot) => ({
     uid,
@@ -40,9 +39,7 @@ export default function TeamPotential({ draft, scores, scoreStatus }: {
     <p className="sv-eyebrow">BEST POSSIBLE FINISH</p>
     <h2 id="sv-potential-heading">Maximum team totals</h2>
     <p className="sv-potential-intro">Earned points plus the best distinct finishing places for your remaining players. Three left can take 1st, 2nd, and 3rd; four left can take 1st through 4th.</p>
-    {scoreStatus === 'loading' ? <p role="status">Loading saved season results…</p> :
-      scoreStatus === 'error' ? <p role="alert">Season results are unavailable. Reload to show team maximums.</p> :
-      !draft.picks.length ? <p>Team maximums appear once players are drafted.</p> : <>
+    {!draft.picks.length ? <p>Team maximums appear once players are drafted.</p> : <>
         <table className="sv-potential-table" aria-describedby="sv-potential-note">
           <caption className="sv-sr-only">Maximum final team scores including points already earned. Each remaining player occupies a different finishing place.</caption>
           <thead><tr><th scope="col">Team</th>{scenarios.map(({ key, label }) => <th scope="col" key={key} className={key === 'winner' ? 'sv-potential-win' : undefined}>{label}</th>)}</tr></thead>
@@ -70,7 +67,7 @@ export default function TeamPotential({ draft, scores, scoreStatus }: {
           </div>)}
           <p>These are independent ceilings for each team. Different teams cannot all claim the same top places. A dash means that scenario is no longer possible.</p>
         </details>
-        <p className="sv-potential-source">{checkedAt ? `Based on saved results checked ${checkedAt} PT. Maximums recalculate when scores update.` : 'No season results have been saved yet. These maximums assume every drafted player is still in the game.'}</p>
+        <p className="sv-potential-source">{checkedAt ? `Based on verified results checked ${checkedAt} PT. ${refreshFailed ? 'Showing the last verified results until the next successful check.' : 'Maximums recalculate when scores update.'}` : 'No season results have been saved yet. These maximums assume every drafted player is still in the game.'}</p>
       </>}
   </section>;
 }
