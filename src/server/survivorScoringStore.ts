@@ -1,4 +1,6 @@
 import { unstable_cache } from 'next/cache';
+import { fetchSundayEdition } from './survivorSundayResults';
+import { lastSundayRelease } from '@/src/lib/survivor/schedule';
 import verified from '@/src/lib/survivor/verified-results.json';
 import { fromFirestoreValue, toFirestoreValue } from '@/src/server/firestoreRest';
 import { getFirestoreProjectId, getFirestoreServiceAccessToken } from '@/src/server/firestoreServiceAccount';
@@ -8,11 +10,10 @@ import { parseSurvivorResults } from '@/src/server/survivorResultsParser';
 function docUrl(projectId: string) {
   return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/survivorScores/${SCORE_ROOM}`;
 }
-export async function refreshSurvivorScoring() {
+export async function saveSundayScores(parsed: SeasonResults) {
   const projectId = getFirestoreProjectId();
   if (!projectId) throw new Error('Scoring database is not configured.');
   const token = await getFirestoreServiceAccessToken();
-  const parsed = await fetchSurvivorSourceResults();
   const url = docUrl(projectId);
   const auth = { Authorization: `Bearer ${token}` };
   const existing = await fetch(url, { headers: auth, cache: 'no-store' });
@@ -36,8 +37,11 @@ export async function fetchSurvivorSourceResults() {
   return validateResults(parseSurvivorResults(await source.text(), checkedAt), verified);
 }
 
-// Cache only successfully parsed results. Failed background refreshes retain
-// the last good value; a cold cache returns an error rather than a fresh zero.
-export const getCachedSurvivorResults = unstable_cache(
-  fetchSurvivorSourceResults, ['survivor-51-validated-results-v1'], { revalidate: 300 },
-);
+// New cache namespace: never reuse data from the former unrestricted feed.
+// The cutoff argument is part of the cache key. Cache misses never fall back to live.
+const cachedEdition = unstable_cache((cutoff: string) => fetchSundayEdition(cutoff),
+  ['survivor-51-sunday-edition-v1'], { revalidate: false });
+
+export function getReleasedSundayScores(now = new Date()) {
+  return cachedEdition(lastSundayRelease(now).toISOString());
+}

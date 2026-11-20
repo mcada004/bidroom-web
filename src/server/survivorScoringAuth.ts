@@ -1,5 +1,4 @@
 import { getBearerToken, getFirebaseServerConfig } from '@/src/server/firebaseApiAuth';
-export { isSaturdayNinePacific } from '@/src/lib/survivor/schedule';
 
 export async function isSurvivorOrganizer(header: string | null) {
   const idToken = getBearerToken(header);
